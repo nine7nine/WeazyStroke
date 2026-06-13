@@ -13,6 +13,9 @@
 #include <gdk/gdkkeysyms.h>
 
 #include <sys/stat.h>
+#include <unistd.h>
+
+#include <filesystem>
 
 #include <algorithm>
 #include <cmath>
@@ -284,9 +287,14 @@ void apply_appearance(State *s) {
     parse_hex(s->appearance.glass_color, gr, gg, gb);
     double alpha = std::clamp(s->appearance.window_opacity, 0, 100) / 100.0;
     const char *ac = s->appearance.accent_color.c_str();
-    char buf[1600];
+    char buf[2600];
     std::snprintf(
         buf, sizeof buf,
+        // Redefine the theme's accent named-colors so EVERY accent it draws
+        // (checkboxes, switches, focus rings, ...) uses ours, not the system's.
+        "@define-color accent_bg_color %s;\n"
+        "@define-color accent_color %s;\n"
+        "@define-color accent_fg_color #ffffff;\n"
         "window { background-color: rgba(%d,%d,%d,%.3f); }\n"
         "list > row:selected { background-color: color-mix(in srgb, %s 20%%, transparent);"
         " box-shadow: inset 3px 0 0 0 color-mix(in srgb, %s 70%%, transparent); }\n"
@@ -295,15 +303,17 @@ void apply_appearance(State *s) {
         "transparent); }\n"
         "button.suggested-action { border-color: color-mix(in srgb, %s 75%%, transparent); color: "
         "%s; }\n"
-        "stackswitcher button:checked { color: %s; }\n"
+        // active tab: our accent text + a tinted accent border
+        "stackswitcher button:checked { color: %s;"
+        " background-color: color-mix(in srgb, %s 14%%, transparent);"
+        " border: 1px solid color-mix(in srgb, %s 55%%, transparent); }\n"
         "scale > trough > highlight { background-color: %s; }\n"
         "scale > trough > slider { background-color: %s; }\n"
-        "checkbutton > check:checked, checkbutton > check:checked:hover {"
-        " background-color: %s; border-color: %s; color: #ffffff; }\n"
-        "checkbutton:focus-within > check, entry.cell:focus-within { outline-color: %s; }\n"
+        "checkbutton check:checked, checkbutton:checked check, check:checked {"
+        " background-color: %s; background-image: none; border-color: %s; color: #ffffff; }\n"
         "entry > text selection, entry.cell > text selection {"
         " background-color: color-mix(in srgb, %s 60%%, transparent); color: #ffffff; }\n",
-        gr, gg, gb, alpha, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac);
+        ac, ac, gr, gg, gb, alpha, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac);
     gtk_css_provider_load_from_string(s->dyn_css, buf);
 }
 
