@@ -258,14 +258,15 @@ void apply_appearance(State *s) {
     std::snprintf(
         buf, sizeof buf,
         "window { background-color: rgba(%d,%d,%d,%.3f); }\n"
-        "listbox > row:selected { background-color: color-mix(in srgb, %s 32%%, transparent); }\n"
+        "listbox > row:selected { background-color: color-mix(in srgb, %s 38%%, transparent);"
+        " box-shadow: inset 3px 0 0 0 %s; }\n"
         "entry.cell:focus-within { border-color: color-mix(in srgb, %s 65%%, transparent); }\n"
         "popover row:selected, popover row:hover { background-color: color-mix(in srgb, %s 50%%, "
         "transparent); }\n"
         "button.suggested-action { border-color: color-mix(in srgb, %s 75%%, transparent); color: "
         "%s; }\n"
         "stackswitcher button:checked { color: %s; }\n",
-        gr, gg, gb, alpha, ac, ac, ac, ac, ac, ac);
+        gr, gg, gb, alpha, ac, ac, ac, ac, ac, ac, ac);
     gtk_css_provider_load_from_string(s->dyn_css, buf);
 }
 
