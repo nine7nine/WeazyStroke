@@ -86,6 +86,19 @@ void LibinputSource::dispatch() {
     }
 }
 
+Sample LibinputSource::update_tablet_pos(libinput_event_tablet_tool *t) {
+    // A tablet tool is an absolute device: each event carries the pen's position
+    // over the surface, which libinput maps onto our screen rectangle. We only
+    // overwrite an axis that actually changed so non-motion events (button, tip)
+    // keep the last known position.
+    if (libinput_event_tablet_tool_x_has_changed(t))
+        pos_.x = libinput_event_tablet_tool_get_x_transformed(t, screen_w_);
+    if (libinput_event_tablet_tool_y_has_changed(t))
+        pos_.y = libinput_event_tablet_tool_get_y_transformed(t, screen_h_);
+    clamp_position();
+    return {pos_.x, pos_.y, libinput_event_tablet_tool_get_time(t)};
+}
+
 void LibinputSource::handle(libinput_event *ev) {
     switch (libinput_event_get_type(ev)) {
     case LIBINPUT_EVENT_DEVICE_ADDED:
@@ -147,6 +160,47 @@ void LibinputSource::handle(libinput_event *ev) {
         sink_.on_scroll(h, v, {pos_.x, pos_.y, libinput_event_pointer_get_time(p)});
         break;
     }
+
+    // --- Tablet tool (stylus / pen) -------------------------------------
+    // The pen is an absolute device, so libinput reports it as a tablet tool
+    // rather than a pointer. We map its motion onto the tracked position and
+    // surface its tip/buttons as logical pen buttons (kPenTip / kPenButton),
+    // letting the same recognizer drive gestures from a stylus.
+
+    case LIBINPUT_EVENT_TABLET_TOOL_AXIS: {
+        libinput_event_tablet_tool *t = libinput_event_get_tablet_tool_event(ev);
+        double px = pos_.x;
+        double py = pos_.y;
+        Sample at = update_tablet_pos(t);
+        sink_.on_motion(at, pos_.x - px, pos_.y - py);
+        break;
+    }
+
+    case LIBINPUT_EVENT_TABLET_TOOL_TIP: {
+        libinput_event_tablet_tool *t = libinput_event_get_tablet_tool_event(ev);
+        Sample at = update_tablet_pos(t);
+        bool down = libinput_event_tablet_tool_get_tip_state(t) == LIBINPUT_TABLET_TOOL_TIP_DOWN;
+        sink_.on_button(kPenTip, down, at);
+        break;
+    }
+
+    case LIBINPUT_EVENT_TABLET_TOOL_BUTTON: {
+        libinput_event_tablet_tool *t = libinput_event_get_tablet_tool_event(ev);
+        Sample at = update_tablet_pos(t);
+        uint32_t code = libinput_event_tablet_tool_get_button(t);
+        bool pressed =
+            libinput_event_tablet_tool_get_button_state(t) == LIBINPUT_BUTTON_STATE_PRESSED;
+        Button logical = evdev_to_logical(static_cast<uint16_t>(code));
+        if (logical)
+            sink_.on_button(logical, pressed, at);
+        break;
+    }
+
+    case LIBINPUT_EVENT_TABLET_TOOL_PROXIMITY:
+        // Pen entered/left hover range: just sync position so the first stroke
+        // starts from where the pen actually is. No button/motion is emitted.
+        update_tablet_pos(libinput_event_get_tablet_tool_event(ev));
+        break;
 
     default:
         break;

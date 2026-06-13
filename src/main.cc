@@ -104,8 +104,10 @@ template <typename Pred> void run_loop(InputSource &source, Pred keep_going) {
     std::printf("  --config PATH    config file (default: %s)\n",
                 GestureConfig::default_path().c_str());
     std::printf("  --record NAME    capture one stroke, save it as NAME, and exit\n");
-    std::printf("  --button N       override trigger button (1 left, 2 mid, 3 right, 8/9 thumb)\n");
+    std::printf("  --button N       override trigger button (1 left, 2 mid, 3 right, 8/9 thumb,\n");
+    std::printf("                   10 pen-tip, 11 pen-button)\n");
     std::printf("  --screen WxH     screen size for pointer tracking (default 1920x1080)\n");
+    std::printf("  --threshold T    match score floor 0..1 (default 0.6; lower = more lenient)\n");
     std::printf("  --grab           grab mice (EVIOCGRAB) to suppress the trigger button;\n");
     std::printf("                   without it, capture is monitor-only and the button also clicks\n");
     std::exit(code);
@@ -119,6 +121,7 @@ int main(int argc, char **argv) {
     int screen_w = 1920;
     int screen_h = 1080;
     int button_override = -1;
+    double threshold = 0.6; // match score floor; pen strokes peak lower than mouse
     bool grab = false;
     std::string config_path = GestureConfig::default_path();
     std::string record_name;
@@ -135,6 +138,8 @@ int main(int argc, char **argv) {
             config_path = argv[++i];
         } else if (a == "--record" && i + 1 < argc) {
             record_name = argv[++i];
+        } else if (a == "--threshold" && i + 1 < argc) {
+            threshold = std::atof(argv[++i]);
         } else if (a == "--grab") {
             grab = true;
         } else {
@@ -190,7 +195,7 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "warning: uinput unavailable: %s\n", e.what());
     }
 
-    GestureRecognizer recognizer(trigger);
+    GestureRecognizer recognizer(trigger, threshold);
 
     Keymap keymap;
     if (!keymap.ok())

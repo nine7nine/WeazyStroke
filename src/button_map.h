@@ -4,6 +4,13 @@
 
 namespace es {
 
+// Logical numbers for tablet-tool ("pen") buttons. Placed above X's 1-9 range so
+// they never collide with mouse buttons, and so a pen event can drive the same
+// trigger machinery as a mouse button. Used as gesture triggers for stylus input.
+constexpr Button kPenTip = 10;     // BTN_TOUCH  — pen tip in contact with the surface
+constexpr Button kPenButton = 11;  // BTN_STYLUS — primary barrel/side button
+constexpr Button kPenButton2 = 12; // BTN_STYLUS2 — secondary barrel button (if present)
+
 // Translation between Linux evdev button codes (BTN_*) and easystroke's logical
 // X-style button numbers. See input_event.h for the numbering.
 

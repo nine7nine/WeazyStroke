@@ -5,6 +5,7 @@
 // Opaque libinput / udev types — full definitions live only in the .cc.
 struct libinput;
 struct libinput_event;
+struct libinput_event_tablet_tool;
 struct udev;
 
 namespace es {
@@ -36,6 +37,10 @@ public:
 private:
     void handle(libinput_event *ev);
     void clamp_position();
+
+    // Updates the tracked position from a tablet-tool event's absolute axes
+    // (scaled to screen) and returns the timestamped sample.
+    Sample update_tablet_pos(libinput_event_tablet_tool *t);
 
     InputSink &sink_;
     libinput *li_ = nullptr;
