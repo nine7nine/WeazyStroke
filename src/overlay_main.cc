@@ -50,11 +50,16 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
     cairo_set_line_width(cr, 4.0);
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-    cairo_set_source_rgba(cr, 0.20, 0.60, 1.0, 0.85); // easystroke-ish blue
-    cairo_move_to(cr, o->xs[0] * sx, o->ys[0] * sy);
-    for (std::size_t i = 1; i < o->xs.size(); ++i)
-        cairo_line_to(cr, o->xs[i] * sx, o->ys[i] * sy);
-    cairo_stroke(cr);
+    // Per-segment blue→green direction gradient, matching the record pad and
+    // easystroke's Stroke::draw (start blue, end green).
+    std::size_t n = o->xs.size();
+    for (std::size_t i = 0; i + 1 < n; ++i) {
+        double t = static_cast<double>(i) / (n - 1);
+        cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, 1.0);
+        cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
+        cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
+        cairo_stroke(cr);
+    }
 }
 
 void process_line(Overlay *o, const std::string &line) {

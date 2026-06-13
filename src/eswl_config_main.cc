@@ -699,6 +699,9 @@ void on_record(GtkButton *, gpointer data) {
     gtk_window_set_transient_for(GTK_WINDOW(dlg), GTK_WINDOW(s->window));
     gtk_window_set_modal(GTK_WINDOW(dlg), TRUE);
     gtk_window_set_default_size(GTK_WINDOW(dlg), 480, 360);
+    // Match the main window: CSD headerbar + transparent (glass) surface.
+    gtk_window_set_titlebar(GTK_WINDOW(dlg), gtk_header_bar_new());
+    g_signal_connect(dlg, "realize", G_CALLBACK(on_window_realize), nullptr);
 
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_widget_set_margin_start(box, 8);
@@ -783,6 +786,7 @@ GtkWidget *col_header() {
 
 GtkWidget *build_actions_page(State *s) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_vexpand(page, TRUE);
     gtk_widget_set_margin_start(page, 6);
     gtk_widget_set_margin_end(page, 6);
     gtk_widget_set_margin_top(page, 6);
