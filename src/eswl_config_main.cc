@@ -157,8 +157,8 @@ box, listbox, list, row, scrolledwindow, viewport, label, stack, grid, separator
   background-color: transparent; background-image: none;
 }
 separator { background-color: rgba(255,255,255,0.10); }
-list > row { border-radius: 8px; margin: 1px 4px; padding: 2px; }
-list > row:selected { background-color: color-mix(in srgb, white 13%, transparent); color: inherit; }
+list > row { border-radius: 0; padding: 4px 2px; }
+list > row:selected { background-color: color-mix(in srgb, white 10%, transparent); color: inherit; }
 
 /* Flat "cell" inputs: read like text in the table, reveal a border on focus. */
 entry.cell, entry.cell > text { color: rgba(255,255,255,0.97); }
@@ -258,8 +258,8 @@ void apply_appearance(State *s) {
     std::snprintf(
         buf, sizeof buf,
         "window { background-color: rgba(%d,%d,%d,%.3f); }\n"
-        "list > row:selected { background-color: color-mix(in srgb, %s 38%%, transparent);"
-        " box-shadow: inset 3px 0 0 0 %s; }\n"
+        "list > row:selected { background-color: color-mix(in srgb, %s 20%%, transparent);"
+        " box-shadow: inset 3px 0 0 0 color-mix(in srgb, %s 70%%, transparent); }\n"
         "entry.cell:focus-within { border-color: color-mix(in srgb, %s 65%%, transparent); }\n"
         "popover row:selected, popover row:hover { background-color: color-mix(in srgb, %s 50%%, "
         "transparent); }\n"
