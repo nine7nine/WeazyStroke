@@ -726,27 +726,38 @@ void on_activate(GtkApplication *app, gpointer data) {
     apply_appearance(s);
 
     s->window = gtk_application_window_new(app);
-    gtk_window_set_title(GTK_WINDOW(s->window), "Easystroke Gesture Recognition");
+    gtk_window_set_title(GTK_WINDOW(s->window), "WeazyStroke");
     gtk_window_set_default_size(GTK_WINDOW(s->window), 720, 500);
     g_signal_connect(s->window, "realize", G_CALLBACK(on_window_realize), nullptr);
 
-    GtkWidget *header = gtk_header_bar_new();
-    gtk_window_set_titlebar(GTK_WINDOW(s->window), header);
-
     GtkWidget *stack = gtk_stack_new();
+    gtk_widget_set_vexpand(stack, TRUE);
     gtk_stack_add_titled(GTK_STACK(stack), build_actions_page(s), "actions", "Actions");
     gtk_stack_add_titled(GTK_STACK(stack), build_prefs_page(s), "preferences", "Preferences");
 
     GtkWidget *switcher = gtk_stack_switcher_new();
     gtk_stack_switcher_set_stack(GTK_STACK_SWITCHER(switcher), GTK_STACK(stack));
-    gtk_header_bar_set_title_widget(GTK_HEADER_BAR(header), switcher);
 
     GtkWidget *save = gtk_button_new_with_label("Save");
     gtk_widget_add_css_class(save, "suggested-action");
     g_signal_connect(save, "clicked", G_CALLBACK(on_save), s);
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), save);
+
+    // Tabs + Save live in the window body (an in-content toolbar), not the
+    // window decoration.
+    GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_margin_start(toolbar, 8);
+    gtk_widget_set_margin_end(toolbar, 8);
+    gtk_widget_set_margin_top(toolbar, 8);
+    gtk_widget_set_margin_bottom(toolbar, 4);
+    gtk_box_append(GTK_BOX(toolbar), switcher);
+    GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(spacer, TRUE);
+    gtk_box_append(GTK_BOX(toolbar), spacer);
+    gtk_box_append(GTK_BOX(toolbar), save);
 
     GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_append(GTK_BOX(root), toolbar);
+    gtk_box_append(GTK_BOX(root), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL));
     gtk_box_append(GTK_BOX(root), stack);
     s->status = gtk_label_new("");
     gtk_label_set_xalign(GTK_LABEL(s->status), 0.0);
@@ -783,7 +794,7 @@ int main(int argc, char **argv) {
     load_appearance(&state);
 
     GtkApplication *app =
-        gtk_application_new("org.easystroke.wayland.Config", G_APPLICATION_DEFAULT_FLAGS);
+        gtk_application_new("org.weazystroke.Config", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(app, "activate", G_CALLBACK(on_activate), &state);
     int status = g_application_run(G_APPLICATION(app), 1, argv);
     g_object_unref(app);
