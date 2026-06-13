@@ -99,6 +99,16 @@ Sample LibinputSource::update_tablet_pos(libinput_event_tablet_tool *t) {
     return {pos_.x, pos_.y, libinput_event_tablet_tool_get_time(t)};
 }
 
+void LibinputSource::set_pen_held(Button b, bool pressed) {
+    auto it = std::find(pen_held_.begin(), pen_held_.end(), b);
+    if (pressed) {
+        if (it == pen_held_.end())
+            pen_held_.push_back(b);
+    } else if (it != pen_held_.end()) {
+        pen_held_.erase(it);
+    }
+}
+
 void LibinputSource::handle(libinput_event *ev) {
     switch (libinput_event_get_type(ev)) {
     case LIBINPUT_EVENT_DEVICE_ADDED:
@@ -180,6 +190,7 @@ void LibinputSource::handle(libinput_event *ev) {
         libinput_event_tablet_tool *t = libinput_event_get_tablet_tool_event(ev);
         Sample at = update_tablet_pos(t);
         bool down = libinput_event_tablet_tool_get_tip_state(t) == LIBINPUT_TABLET_TOOL_TIP_DOWN;
+        set_pen_held(kPenTip, down);
         sink_.on_button(kPenTip, down, at);
         break;
     }
@@ -191,16 +202,30 @@ void LibinputSource::handle(libinput_event *ev) {
         bool pressed =
             libinput_event_tablet_tool_get_button_state(t) == LIBINPUT_BUTTON_STATE_PRESSED;
         Button logical = evdev_to_logical(static_cast<uint16_t>(code));
-        if (logical)
+        if (logical) {
+            set_pen_held(logical, pressed);
             sink_.on_button(logical, pressed, at);
+        }
         break;
     }
 
-    case LIBINPUT_EVENT_TABLET_TOOL_PROXIMITY:
-        // Pen entered/left hover range: just sync position so the first stroke
-        // starts from where the pen actually is. No button/motion is emitted.
-        update_tablet_pos(libinput_event_get_tablet_tool_event(ev));
+    case LIBINPUT_EVENT_TABLET_TOOL_PROXIMITY: {
+        libinput_event_tablet_tool *t = libinput_event_get_tablet_tool_event(ev);
+        Sample at = update_tablet_pos(t);
+        // On proximity-out the hardware stops reporting buttons, so any tip or
+        // button still held would leave a gesture open forever. Synthesize the
+        // releases (in press order) so the recognizer finalizes the stroke —
+        // this is the common "drew the gesture, then lifted the pen away" case.
+        if (libinput_event_tablet_tool_get_proximity_state(t) ==
+            LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_OUT) {
+            for (Button b : pen_held_)
+                sink_.on_button(b, false, at);
+            pen_held_.clear();
+        }
+        // Proximity-in needs nothing more: update_tablet_pos already synced the
+        // start position so the first stroke begins where the pen actually is.
         break;
+    }
 
     default:
         break;
