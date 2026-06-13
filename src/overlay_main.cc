@@ -65,16 +65,19 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
     }
 
     if (!o->osd.empty()) {
-        double fs = height * 0.045;
-        if (fs < 26.0)
-            fs = 26.0;
+        double fs = height * 0.020;
+        if (fs < 20.0)
+            fs = 20.0;
+        if (fs > 32.0)
+            fs = 32.0;
         cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, fs);
         cairo_text_extents_t te;
         cairo_text_extents(cr, o->osd.c_str(), &te);
-        double pad = fs * 0.6;
+        double pad = fs * 0.7;
         double bw = te.width + 2 * pad, bh = te.height + pad;
-        double bx = (width - bw) / 2.0, by = height * 0.66, r = bh / 2.0;
+        // small pill, centered near the bottom of the screen
+        double bx = (width - bw) / 2.0, by = height - bh - height * 0.06, r = bh / 2.0;
         cairo_new_sub_path(cr); // rounded-pill background
         cairo_arc(cr, bx + bw - r, by + r, r, -M_PI / 2, M_PI / 2);
         cairo_arc(cr, bx + r, by + r, r, M_PI / 2, 3 * M_PI / 2);

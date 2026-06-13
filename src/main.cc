@@ -41,6 +41,12 @@ void on_signal(int) { g_running = false; }
 std::atomic<bool> g_reload{false};
 void on_reload(int) { g_reload = true; }
 
+// When disabled, recognized gestures don't run their actions (except the Misc
+// toggle itself, so you can always re-enable). Toggled by a Misc gesture or
+// SIGUSR1 (raised by the GUI's pause button).
+std::atomic<bool> g_disabled{false};
+void on_toggle(int) { g_disabled = !g_disabled; }
+
 // Directory of our own executable, so we can find the sibling eswl-overlay
 // binary whether running from the build tree or an install prefix.
 std::string self_dir() {
@@ -163,10 +169,22 @@ void build_bindings(GestureRecognizer &recognizer, const GestureConfig &cfg, Inp
                              name.c_str(), arg.c_str());
         } else if (g.type == "ignore") {
             action = [] {}; // recognized, but deliberately does nothing
+        } else if (g.type == "misc") {
+            if (arg == "disable")
+                action = [] { g_disabled = !g_disabled; };
+            // future misc subtypes: "settings", "unminimize", ...
         }
 
         if (!action)
             action = [name] { std::printf("  (gesture '%s' has no usable action)\n", name.c_str()); };
+
+        // Honor the global enable/disable toggle: when disabled, every action is
+        // suppressed except the Misc toggle itself (so you can re-enable).
+        if (g.type != "misc")
+            action = [a = std::move(action)] {
+                if (!g_disabled)
+                    a();
+            };
         recognizer.add_binding({name, std::move(strokes), std::move(action)});
     }
 }
@@ -294,6 +312,7 @@ int main(int argc, char **argv) {
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
     std::signal(SIGHUP, on_reload);  // config GUI raises this after saving
+    std::signal(SIGUSR1, on_toggle); // GUI pause button toggles enable/disable
     std::signal(SIGCHLD, SIG_IGN);   // auto-reap action commands
     std::signal(SIGPIPE, SIG_IGN);   // a dead overlay must not kill the daemon
 

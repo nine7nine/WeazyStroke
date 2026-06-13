@@ -27,8 +27,8 @@ using namespace es;
 namespace {
 
 // Action types in dropdown order (easystroke's set). Index 0 = no action.
-const char *const kTypeNames[] = {"(none)", "command", "key",    "text",
-                                  "button", "scroll",  "ignore", nullptr};
+const char *const kTypeNames[] = {"(none)", "command", "key",    "text",   "button",
+                                  "scroll", "ignore",  "misc",   nullptr};
 
 const char *const kTriggerLabels[] = {"1 — left",       "2 — middle",  "3 — right",
                                       "8 — back",        "9 — forward", "10 — pen tip",
@@ -493,6 +493,26 @@ GtkWidget *make_scroll_pick(RowData *rd) {
     return dd;
 }
 
+// Misc actions (mirrors easystroke's Misc type).
+const char *const kMiscNames[] = {"(none)", "Disable / Enable WeazyStroke", nullptr};
+const char *const kMiscArgs[] = {"", "disable"};
+void on_misc_pick(GObject *dd, GParamSpec *, gpointer d) {
+    set_arg(static_cast<RowData *>(d), kMiscArgs[gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))]);
+}
+GtkWidget *make_misc_pick(RowData *rd) {
+    GtkWidget *dd = gtk_drop_down_new_from_strings(kMiscNames);
+    gtk_widget_add_css_class(dd, "cell");
+    gtk_widget_set_halign(dd, GTK_ALIGN_START);
+    const std::string &a = rd->s->cfg.gestures[rd->idx].argument;
+    for (int i = 0; kMiscNames[i]; ++i)
+        if (a == kMiscArgs[i]) {
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(dd), i);
+            break;
+        }
+    g_signal_connect(dd, "notify::selected", G_CALLBACK(on_misc_pick), rd);
+    return dd;
+}
+
 // Swap the argument cell to the editor appropriate for the current type.
 void populate_arg_editor(RowData *rd) {
     GtkWidget *holder = rd->arg_holder;
@@ -507,6 +527,8 @@ void populate_arg_editor(RowData *rd) {
         editor = make_button_pick(rd);
     } else if (type == "scroll") {
         editor = make_scroll_pick(rd);
+    } else if (type == "misc") {
+        editor = make_misc_pick(rd);
     } else if (type == "ignore") {
         editor = gtk_label_new("(no argument)");
         gtk_label_set_xalign(GTK_LABEL(editor), 0.0);
@@ -645,6 +667,12 @@ void on_save(GtkButton *, gpointer data) {
     } catch (const std::exception &e) {
         set_status(s, std::string("Save failed: ") + e.what());
     }
+}
+
+void on_pause(GtkButton *, gpointer d) {
+    State *s = static_cast<State *>(d);
+    g_spawn_command_line_async("pkill -USR1 -x eswl-daemon", nullptr);
+    set_status(s, "Toggled WeazyStroke on/off (if the daemon is running).");
 }
 
 void on_opacity_changed(GtkSpinButton *sp, gpointer d) {
@@ -1148,6 +1176,9 @@ void on_activate(GtkApplication *app, gpointer data) {
     GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_widget_set_hexpand(spacer, TRUE);
     gtk_box_append(GTK_BOX(toolbar), spacer);
+    GtkWidget *pause = gtk_button_new_with_label("Pause/Resume");
+    g_signal_connect(pause, "clicked", G_CALLBACK(on_pause), s);
+    gtk_box_append(GTK_BOX(toolbar), pause);
     gtk_box_append(GTK_BOX(toolbar), save);
 
     GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
