@@ -297,8 +297,13 @@ void apply_appearance(State *s) {
         "%s; }\n"
         "stackswitcher button:checked { color: %s; }\n"
         "scale > trough > highlight { background-color: %s; }\n"
-        "scale > trough > slider { background-color: %s; }\n",
-        gr, gg, gb, alpha, ac, ac, ac, ac, ac, ac, ac, ac, ac);
+        "scale > trough > slider { background-color: %s; }\n"
+        "checkbutton > check:checked, checkbutton > check:checked:hover {"
+        " background-color: %s; border-color: %s; color: #ffffff; }\n"
+        "checkbutton:focus-within > check, entry.cell:focus-within { outline-color: %s; }\n"
+        "entry > text selection, entry.cell > text selection {"
+        " background-color: color-mix(in srgb, %s 60%%, transparent); color: #ffffff; }\n",
+        gr, gg, gb, alpha, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac, ac);
     gtk_css_provider_load_from_string(s->dyn_css, buf);
 }
 
