@@ -9,11 +9,19 @@ namespace es {
 // One persisted gesture: its recorded stroke and the action to run on match.
 // Exactly one action field is used, checked in priority order: key, then text,
 // then command.
+// One bound gesture, modelled on easystroke's typed actions: a single `type`
+// plus an `argument` whose meaning depends on it:
+//   "command" -> shell command line (launch apps, scripts)
+//   "key"     -> key combo, e.g. "ctrl+shift+t"
+//   "text"    -> literal text to type
+//   "button"  -> mouse button number to click (1 left, 2 mid, 3 right, ...)
+//   "scroll"  -> direction + optional count, e.g. "down" or "down 3"
+//   "ignore"  -> explicit no-op (recognized, but does nothing)
+//   ""        -> no action bound yet
 struct GestureEntry {
     std::string name;
-    std::string key;     // key combo, e.g. "ctrl+shift+t"
-    std::string text;    // literal text to type
-    std::string command; // shell command to run
+    std::string type;
+    std::string argument;
     // One or more recorded examples of the gesture. A candidate matches if it
     // matches ANY example (best score wins), so recording the same gesture a
     // few times makes recognition sturdier.

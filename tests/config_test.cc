@@ -1,5 +1,6 @@
-// Saves a config to a temp file, reads it back, and checks the round-trip,
-// including multi-example gestures and legacy single-"points" configs.
+// Saves a config to a temp file, reads it back, and checks the round-trip:
+// typed actions, multi-example gestures, and legacy formats (single "points",
+// and the old key/text/command fields folded into type+argument).
 
 #include "gesture_config.h"
 #include "json.h"
@@ -26,20 +27,23 @@ int main() {
 
     GestureEntry term;
     term.name = "launch-term";
-    term.command = "xterm";
+    term.type = "command";
+    term.argument = "xterm";
     term.strokes = {{{0, 0}, {1, 2.5}, {3, 4}}};
     cfg.gestures.push_back(term);
 
     GestureEntry tab;
     tab.name = "close-tab";
-    tab.key = "ctrl+w";
+    tab.type = "key";
+    tab.argument = "ctrl+w";
     tab.strokes = {{{-1, -1}, {0, 0}, {1, 1}, {2, 2}}};
     cfg.gestures.push_back(tab);
 
     // A gesture with two recorded examples.
     GestureEntry multi;
     multi.name = "swipe";
-    multi.text = "best, me";
+    multi.type = "text";
+    multi.argument = "best, me";
     multi.strokes = {{{0, 0}, {5, 0}, {10, 0}}, {{0, 0}, {0, 5}, {0, 10}, {0, 15}}};
     cfg.gestures.push_back(multi);
 
@@ -50,23 +54,25 @@ int main() {
     assert(back.gestures.size() == 3);
 
     assert(back.gestures[0].name == "launch-term");
-    assert(back.gestures[0].command == "xterm");
+    assert(back.gestures[0].type == "command");
+    assert(back.gestures[0].argument == "xterm");
     assert(back.gestures[0].strokes.size() == 1);
     assert(back.gestures[0].strokes[0].size() == 3);
     assert(back.gestures[0].strokes[0][1].x == 1.0);
     assert(back.gestures[0].strokes[0][1].y == 2.5);
 
     assert(back.gestures[1].name == "close-tab");
-    assert(back.gestures[1].key == "ctrl+w");
-    assert(back.gestures[1].command.empty());
+    assert(back.gestures[1].type == "key");
+    assert(back.gestures[1].argument == "ctrl+w");
 
-    assert(back.gestures[2].text == "best, me");
+    assert(back.gestures[2].type == "text");
+    assert(back.gestures[2].argument == "best, me");
     assert(back.gestures[2].strokes.size() == 2);
     assert(back.gestures[2].strokes[0].size() == 3);
     assert(back.gestures[2].strokes[1].size() == 4);
 
-    // Legacy compatibility: a config written with a single "points" array (the
-    // pre-multi-example format) still loads as one stroke.
+    // Legacy compatibility: an old config with a single "points" array and the
+    // pre-typed "command" field still loads (one stroke, type folded in).
     {
         json::Array pts;
         for (int i = 0; i < 3; ++i) {
@@ -88,6 +94,8 @@ int main() {
     GestureConfig legacy = GestureConfig::load(tmp.string());
     assert(legacy.gestures.size() == 1);
     assert(legacy.gestures[0].name == "legacy");
+    assert(legacy.gestures[0].type == "command");
+    assert(legacy.gestures[0].argument == "true");
     assert(legacy.gestures[0].strokes.size() == 1);
     assert(legacy.gestures[0].strokes[0].size() == 3);
 

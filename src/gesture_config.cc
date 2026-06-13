@@ -44,12 +44,27 @@ GestureConfig GestureConfig::load(const std::string &path) {
             GestureEntry e;
             if (g["name"].is_string())
                 e.name = g["name"].as_string();
-            if (g["key"].is_string())
-                e.key = g["key"].as_string();
-            if (g["text"].is_string())
-                e.text = g["text"].as_string();
-            if (g["command"].is_string())
-                e.command = g["command"].as_string();
+            if (g["type"].is_string()) {
+                e.type = g["type"].as_string();
+                if (g["argument"].is_string())
+                    e.argument = g["argument"].as_string();
+            } else {
+                // Legacy format: separate key/text/command fields, priority
+                // key > text > command. Fold into the typed model.
+                auto str = [&](const char *k) {
+                    return g[k].is_string() ? g[k].as_string() : std::string();
+                };
+                if (!str("key").empty()) {
+                    e.type = "key";
+                    e.argument = str("key");
+                } else if (!str("text").empty()) {
+                    e.type = "text";
+                    e.argument = str("text");
+                } else if (!str("command").empty()) {
+                    e.type = "command";
+                    e.argument = str("command");
+                }
+            }
             auto read_stroke = [](const json::Value &arr) {
                 std::vector<Point> stroke;
                 for (const json::Value &p : arr.as_array())
@@ -81,9 +96,8 @@ void GestureConfig::save(const std::string &path) const {
     for (const GestureEntry &e : gestures) {
         json::Object o;
         o["name"] = json::Value(e.name);
-        o["key"] = json::Value(e.key);
-        o["text"] = json::Value(e.text);
-        o["command"] = json::Value(e.command);
+        o["type"] = json::Value(e.type);
+        o["argument"] = json::Value(e.argument);
         json::Array strokes;
         for (const std::vector<Point> &stroke : e.strokes) {
             json::Array pts;

@@ -47,6 +47,30 @@ std::string self_dir() {
     return slash == std::string::npos ? "." : path.substr(0, slash);
 }
 
+// Parse a scroll argument ("up", "down 3", "left", "right 2") into wheel detents
+// (dx horizontal, dy vertical; +y scrolls up, +x scrolls right). Default count 3.
+bool parse_scroll(const std::string &arg, int &dx, int &dy) {
+    char dir[16] = {0};
+    int count = 3;
+    if (std::sscanf(arg.c_str(), "%15s %d", dir, &count) < 1)
+        return false;
+    if (count <= 0)
+        count = 3;
+    std::string d = dir;
+    dx = dy = 0;
+    if (d == "up")
+        dy = count;
+    else if (d == "down")
+        dy = -count;
+    else if (d == "left")
+        dx = -count;
+    else if (d == "right")
+        dx = count;
+    else
+        return false;
+    return true;
+}
+
 // Captures one stroke for --record mode, then signals completion.
 class RecorderSink final : public InputSink {
 public:
@@ -219,8 +243,8 @@ int main(int argc, char **argv) {
             cfg.gestures.push_back(std::move(e));
             std::printf("saved gesture '%s' (%zu points) to %s\n", record_name.c_str(),
                         rec.points().size(), config_path.c_str());
-            std::printf("set its action by editing the \"key\"/\"text\"/\"command\" field, or "
-                        "record the same name again to add another example.\n");
+            std::printf("set its action by editing \"type\"+\"argument\" (command/key/text/button/"
+                        "scroll/ignore), or record the same name again to add another example.\n");
         }
         cfg.save(config_path);
         return 0;
@@ -249,25 +273,48 @@ int main(int argc, char **argv) {
                 strokes.push_back(std::move(st));
         }
         std::string name = g.name;
+        const std::string &arg = g.argument;
         std::function<void()> action;
 
-        if (!g.key.empty()) {
+        if (g.type == "command") {
+            std::string command = arg;
+            action = [command] { run_command(command); };
+        } else if (g.type == "key") {
             KeyStroke ks;
-            if (inj && keymap.from_combo(g.key, ks))
+            if (inj && keymap.from_combo(arg, ks))
                 action = [inj, ks] { send_keystroke(*inj, ks); };
             else
-                std::fprintf(stderr, "warning: gesture '%s': cannot bind key '%s'\n",
-                             name.c_str(), g.key.c_str());
-        } else if (!g.text.empty()) {
-            std::string text = g.text;
+                std::fprintf(stderr, "warning: gesture '%s': cannot bind key '%s'\n", name.c_str(),
+                             arg.c_str());
+        } else if (g.type == "text") {
+            std::string text = arg;
             if (inj && keymap.ok())
                 action = [inj, &keymap, text] { type_text(keymap, *inj, text); };
             else
                 std::fprintf(stderr, "warning: gesture '%s': cannot bind text action\n",
                              name.c_str());
-        } else if (!g.command.empty()) {
-            std::string command = g.command;
-            action = [command] { run_command(command); };
+        } else if (g.type == "button") {
+            int n = std::atoi(arg.c_str());
+            if (inj && n > 0) {
+                Button b = static_cast<Button>(n);
+                action = [inj, b] { inj->click(b); };
+            } else
+                std::fprintf(stderr, "warning: gesture '%s': bad button '%s'\n", name.c_str(),
+                             arg.c_str());
+        } else if (g.type == "scroll") {
+            int dx = 0, dy = 0;
+            if (inj && parse_scroll(arg, dx, dy))
+                action = [inj, dx, dy] {
+                    inj->scroll(dx, dy);
+                    inj->flush();
+                };
+            else
+                std::fprintf(stderr,
+                             "warning: gesture '%s': bad scroll '%s' (use up/down/left/right "
+                             "[count])\n",
+                             name.c_str(), arg.c_str());
+        } else if (g.type == "ignore") {
+            action = [] {}; // recognized, but deliberately does nothing
         }
 
         if (!action)
