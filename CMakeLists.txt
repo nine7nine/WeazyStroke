@@ -21,6 +21,8 @@ pkg_check_modules(XKB REQUIRED IMPORTED_TARGET xkbcommon)
 # GTK4 + layer-shell only for the standalone overlay renderer (eswl-overlay).
 # The core engine and daemon link none of this.
 pkg_check_modules(OVERLAY REQUIRED IMPORTED_TARGET gtk4 gtk4-layer-shell-0)
+# GTK4 alone for the config GUI (eswl-config).
+pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
 
 # Core engine: recognition + input backends. Deliberately self-contained --
 # only libc/libstdc++ and libinput/libudev. No Boost, no GUI toolkit.
@@ -49,6 +51,12 @@ target_link_libraries(eswl-daemon PRIVATE eswl_core)
 # under -Wpedantic, and ASan reports benign one-shot GTK allocations on exit).
 add_executable(eswl-overlay src/overlay_main.cc)
 target_link_libraries(eswl-overlay PRIVATE PkgConfig::OVERLAY)
+
+# Config GUI. Reuses the config/JSON layer directly (not the ASan'd eswl_core,
+# to avoid a sanitizer mismatch and GTK leak noise).
+add_executable(eswl-config src/eswl_config_main.cc src/gesture_config.cc src/json.cc)
+target_include_directories(eswl-config PRIVATE src)
+target_link_libraries(eswl-config PRIVATE PkgConfig::GTK4)
 
 enable_testing()
 set(ESWL_TESTS recognition json config keymap trigger_gate multitemplate)
@@ -81,4 +89,4 @@ if(ENABLE_ASAN)
     message(STATUS "AddressSanitizer + UBSan: ENABLED")
 endif()
 
-install(TARGETS eswl-daemon eswl-overlay DESTINATION bin/)
+install(TARGETS eswl-daemon eswl-overlay eswl-config DESTINATION bin/)
