@@ -199,11 +199,30 @@ int main(int argc, char **argv) {
             return 1;
         }
         cfg.trigger_button = trigger;
-        cfg.gestures.push_back({record_name, "", "", "", rec.points()});
+        GestureEntry *existing = nullptr;
+        for (GestureEntry &e : cfg.gestures)
+            if (e.name == record_name) {
+                existing = &e;
+                break;
+            }
+        if (existing) {
+            // Recording an existing name appends another example for sturdier
+            // matching, rather than creating a duplicate gesture.
+            existing->strokes.push_back(rec.points());
+            std::printf("added example #%zu to gesture '%s' (%zu points) in %s\n",
+                        existing->strokes.size(), record_name.c_str(), rec.points().size(),
+                        config_path.c_str());
+        } else {
+            GestureEntry e;
+            e.name = record_name;
+            e.strokes.push_back(rec.points());
+            cfg.gestures.push_back(std::move(e));
+            std::printf("saved gesture '%s' (%zu points) to %s\n", record_name.c_str(),
+                        rec.points().size(), config_path.c_str());
+            std::printf("set its action by editing the \"key\"/\"text\"/\"command\" field, or "
+                        "record the same name again to add another example.\n");
+        }
         cfg.save(config_path);
-        std::printf("saved gesture '%s' (%zu points) to %s\n", record_name.c_str(),
-                    rec.points().size(), config_path.c_str());
-        std::printf("set its action by editing the \"command\" field for that entry.\n");
         return 0;
     }
 
@@ -223,7 +242,12 @@ int main(int argc, char **argv) {
 
     InputInjector *inj = injector.get();
     for (const GestureEntry &g : cfg.gestures) {
-        Gesture stroke = Gesture::from_points(g.points);
+        std::vector<Gesture> strokes;
+        for (const std::vector<Point> &pts : g.strokes) {
+            Gesture st = Gesture::from_points(pts);
+            if (st.valid())
+                strokes.push_back(std::move(st));
+        }
         std::string name = g.name;
         std::function<void()> action;
 
@@ -248,7 +272,7 @@ int main(int argc, char **argv) {
 
         if (!action)
             action = [name] { std::printf("  (gesture '%s' has no usable action)\n", name.c_str()); };
-        recognizer.add_binding({name, std::move(stroke), std::move(action)});
+        recognizer.add_binding({name, std::move(strokes), std::move(action)});
     }
     recognizer.set_reporter([](const Recognition &r) {
         if (r.matched)

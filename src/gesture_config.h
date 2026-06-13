@@ -14,7 +14,10 @@ struct GestureEntry {
     std::string key;     // key combo, e.g. "ctrl+shift+t"
     std::string text;    // literal text to type
     std::string command; // shell command to run
-    std::vector<Point> points;
+    // One or more recorded examples of the gesture. A candidate matches if it
+    // matches ANY example (best score wins), so recording the same gesture a
+    // few times makes recognition sturdier.
+    std::vector<std::vector<Point>> strokes;
 };
 
 // The on-disk configuration. Self-contained JSON; no Boost.

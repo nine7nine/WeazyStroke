@@ -51,7 +51,7 @@ add_executable(eswl-overlay src/overlay_main.cc)
 target_link_libraries(eswl-overlay PRIVATE PkgConfig::OVERLAY)
 
 enable_testing()
-set(ESWL_TESTS recognition json config keymap trigger_gate)
+set(ESWL_TESTS recognition json config keymap trigger_gate multitemplate)
 set(ESWL_APP_TARGETS eswl-daemon)
 foreach(t ${ESWL_TESTS})
     add_executable(eswl_${t}_test tests/${t}_test.cc)

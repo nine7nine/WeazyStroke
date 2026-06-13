@@ -74,10 +74,12 @@ Recognition GestureRecognizer::recognize(const Gesture &g) const {
         return best;
 
     for (const GestureBinding &b : bindings_) {
-        double score = Gesture::compare(g, b.stroke);
-        if (score > best.score) {
-            best.score = score;
-            best.name = b.name;
+        for (const Gesture &tmpl : b.strokes) {
+            double score = Gesture::compare(g, tmpl);
+            if (score > best.score) {
+                best.score = score;
+                best.name = b.name;
+            }
         }
     }
     best.matched = best.score >= threshold_;

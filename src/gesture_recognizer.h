@@ -9,10 +9,12 @@
 
 namespace es {
 
-// A named gesture template and the action to run when it matches.
+// A named gesture and the action to run when it matches. A gesture may carry
+// several recorded examples ("templates"); the candidate matches if it matches
+// any of them (best score wins).
 struct GestureBinding {
     std::string name;
-    Gesture stroke;
+    std::vector<Gesture> strokes;
     std::function<void()> action;
 };
 

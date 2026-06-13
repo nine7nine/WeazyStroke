@@ -50,13 +50,22 @@ GestureConfig GestureConfig::load(const std::string &path) {
                 e.text = g["text"].as_string();
             if (g["command"].is_string())
                 e.command = g["command"].as_string();
-            const json::Value &pts = g["points"];
-            if (pts.is_array()) {
-                for (const json::Value &p : pts.as_array()) {
+            auto read_stroke = [](const json::Value &arr) {
+                std::vector<Point> stroke;
+                for (const json::Value &p : arr.as_array())
                     if (p.is_array() && p.as_array().size() >= 2)
-                        e.points.push_back({p.as_array()[0].as_number(),
-                                            p.as_array()[1].as_number()});
-                }
+                        stroke.push_back(
+                            {p.as_array()[0].as_number(), p.as_array()[1].as_number()});
+                return stroke;
+            };
+            // Current format: "strokes" = array of strokes (each an array of
+            // [x,y]). Fall back to a legacy single "points" array.
+            if (const json::Value &strokes = g["strokes"]; strokes.is_array()) {
+                for (const json::Value &s : strokes.as_array())
+                    if (s.is_array())
+                        e.strokes.push_back(read_stroke(s));
+            } else if (const json::Value &pts = g["points"]; pts.is_array()) {
+                e.strokes.push_back(read_stroke(pts));
             }
             cfg.gestures.push_back(std::move(e));
         }
@@ -75,14 +84,18 @@ void GestureConfig::save(const std::string &path) const {
         o["key"] = json::Value(e.key);
         o["text"] = json::Value(e.text);
         o["command"] = json::Value(e.command);
-        json::Array pts;
-        for (const Point &p : e.points) {
-            json::Array xy;
-            xy.push_back(json::Value(p.x));
-            xy.push_back(json::Value(p.y));
-            pts.push_back(json::Value(std::move(xy)));
+        json::Array strokes;
+        for (const std::vector<Point> &stroke : e.strokes) {
+            json::Array pts;
+            for (const Point &p : stroke) {
+                json::Array xy;
+                xy.push_back(json::Value(p.x));
+                xy.push_back(json::Value(p.y));
+                pts.push_back(json::Value(std::move(xy)));
+            }
+            strokes.push_back(json::Value(std::move(pts)));
         }
-        o["points"] = json::Value(std::move(pts));
+        o["strokes"] = json::Value(std::move(strokes));
         out_gestures.push_back(json::Value(std::move(o)));
     }
     root["gestures"] = json::Value(std::move(out_gestures));
