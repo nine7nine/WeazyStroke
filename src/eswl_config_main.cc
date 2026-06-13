@@ -10,6 +10,7 @@
 #include "json.h"
 
 #include <gtk/gtk.h>
+#include <gdk/gdkkeysyms.h>
 
 #include <algorithm>
 #include <cmath>
@@ -67,7 +68,7 @@ void parse_hex(const std::string &hex, int &r, int &g, int &b) {
 struct RowData {
     State *s;
     int idx;
-    GtkWidget *arg;
+    GtkWidget *arg_holder; // container swapped to a type-specific argument editor
 };
 
 int type_to_index(const std::string &type) {
@@ -323,15 +324,180 @@ void on_name_changed(GtkEditable *e, gpointer d) {
     RowData *rd = static_cast<RowData *>(d);
     rd->s->cfg.gestures[rd->idx].name = gtk_editable_get_text(e);
 }
-void on_arg_changed(GtkEditable *e, gpointer d) {
-    RowData *rd = static_cast<RowData *>(d);
-    rd->s->cfg.gestures[rd->idx].argument = gtk_editable_get_text(e);
+void set_arg(RowData *rd, const std::string &v) {
+    rd->s->cfg.gestures[rd->idx].argument = v;
 }
+void on_cell_arg_changed(GtkEditable *e, gpointer d) {
+    set_arg(static_cast<RowData *>(d), gtk_editable_get_text(e));
+}
+
+// --- Key grabber: click, then press a combo to capture it (no typing) -------
+struct KeyGrab {
+    RowData *rd;
+    GtkWidget *button;
+    bool armed;
+};
+void free_keygrab(gpointer d) { delete static_cast<KeyGrab *>(d); }
+
+bool is_modifier_keyval(guint kv) {
+    switch (kv) {
+    case GDK_KEY_Shift_L:
+    case GDK_KEY_Shift_R:
+    case GDK_KEY_Control_L:
+    case GDK_KEY_Control_R:
+    case GDK_KEY_Alt_L:
+    case GDK_KEY_Alt_R:
+    case GDK_KEY_Meta_L:
+    case GDK_KEY_Meta_R:
+    case GDK_KEY_Super_L:
+    case GDK_KEY_Super_R:
+    case GDK_KEY_Hyper_L:
+    case GDK_KEY_Hyper_R:
+    case GDK_KEY_Caps_Lock:
+    case GDK_KEY_ISO_Level3_Shift:
+        return true;
+    default:
+        return false;
+    }
+}
+std::string format_combo(guint keyval, GdkModifierType state) {
+    std::string s;
+    if (state & GDK_CONTROL_MASK)
+        s += "ctrl+";
+    if (state & GDK_ALT_MASK)
+        s += "alt+";
+    if (state & GDK_SHIFT_MASK)
+        s += "shift+";
+    if (state & GDK_SUPER_MASK)
+        s += "super+";
+    const char *name = gdk_keyval_name(gdk_keyval_to_lower(keyval));
+    if (name)
+        s += name;
+    return s;
+}
+void keygrab_set_label(KeyGrab *kg) {
+    const std::string &a = kg->rd->s->cfg.gestures[kg->rd->idx].argument;
+    gtk_button_set_label(GTK_BUTTON(kg->button), a.empty() ? "Set shortcut…" : a.c_str());
+}
+void on_keygrab_click(GtkButton *, gpointer d) {
+    KeyGrab *kg = static_cast<KeyGrab *>(d);
+    kg->armed = true;
+    gtk_button_set_label(GTK_BUTTON(kg->button), "Press keys… (Esc cancels)");
+}
+gboolean on_keygrab_key(GtkEventControllerKey *, guint keyval, guint, GdkModifierType state,
+                        gpointer d) {
+    KeyGrab *kg = static_cast<KeyGrab *>(d);
+    if (!kg->armed)
+        return FALSE;
+    if (keyval == GDK_KEY_Escape) {
+        kg->armed = false;
+        keygrab_set_label(kg);
+        return TRUE;
+    }
+    if (is_modifier_keyval(keyval))
+        return TRUE; // wait for a non-modifier key
+    kg->armed = false;
+    set_arg(kg->rd, format_combo(keyval, state));
+    keygrab_set_label(kg);
+    return TRUE;
+}
+GtkWidget *make_key_grab(RowData *rd) {
+    KeyGrab *kg = new KeyGrab{rd, nullptr, false};
+    GtkWidget *btn = gtk_button_new();
+    gtk_widget_add_css_class(btn, "cell");
+    gtk_widget_set_halign(btn, GTK_ALIGN_START);
+    kg->button = btn;
+    keygrab_set_label(kg);
+    g_signal_connect(btn, "clicked", G_CALLBACK(on_keygrab_click), kg);
+    GtkEventController *kc = gtk_event_controller_key_new();
+    g_signal_connect(kc, "key-pressed", G_CALLBACK(on_keygrab_key), kg);
+    gtk_widget_add_controller(btn, kc);
+    g_object_set_data_full(G_OBJECT(btn), "kg", kg, free_keygrab);
+    return btn;
+}
+
+// --- Button / Scroll pickers ------------------------------------------------
+const char *const kButtonNames[] = {"1 — left",      "2 — middle",     "3 — right",
+                                    "4 — wheel up",   "5 — wheel down", "6 — wheel left",
+                                    "7 — wheel right", "8 — back",       "9 — forward",
+                                    nullptr};
+const char *const kScrollNames[] = {"up", "down", "left", "right", nullptr};
+
+void on_button_pick(GObject *dd, GParamSpec *, gpointer d) {
+    set_arg(static_cast<RowData *>(d),
+            std::to_string(gtk_drop_down_get_selected(GTK_DROP_DOWN(dd)) + 1));
+}
+void on_scroll_pick(GObject *dd, GParamSpec *, gpointer d) {
+    set_arg(static_cast<RowData *>(d), kScrollNames[gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))]);
+}
+GtkWidget *make_button_pick(RowData *rd) {
+    GtkWidget *dd = gtk_drop_down_new_from_strings(kButtonNames);
+    gtk_widget_add_css_class(dd, "cell");
+    gtk_widget_set_halign(dd, GTK_ALIGN_START);
+    int n = std::atoi(rd->s->cfg.gestures[rd->idx].argument.c_str());
+    if (n >= 1 && n <= 9)
+        gtk_drop_down_set_selected(GTK_DROP_DOWN(dd), n - 1);
+    else
+        set_arg(rd, "1");
+    g_signal_connect(dd, "notify::selected", G_CALLBACK(on_button_pick), rd);
+    return dd;
+}
+GtkWidget *make_scroll_pick(RowData *rd) {
+    GtkWidget *dd = gtk_drop_down_new_from_strings(kScrollNames);
+    gtk_widget_add_css_class(dd, "cell");
+    gtk_widget_set_halign(dd, GTK_ALIGN_START);
+    const std::string &a = rd->s->cfg.gestures[rd->idx].argument;
+    bool matched = false;
+    for (int i = 0; kScrollNames[i]; ++i)
+        if (a.rfind(kScrollNames[i], 0) == 0) {
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(dd), i);
+            matched = true;
+            break;
+        }
+    if (!matched)
+        set_arg(rd, "down");
+    g_signal_connect(dd, "notify::selected", G_CALLBACK(on_scroll_pick), rd);
+    return dd;
+}
+
+// Swap the argument cell to the editor appropriate for the current type.
+void populate_arg_editor(RowData *rd) {
+    GtkWidget *holder = rd->arg_holder;
+    while (GtkWidget *c = gtk_widget_get_first_child(holder))
+        gtk_box_remove(GTK_BOX(holder), c);
+
+    const std::string &type = rd->s->cfg.gestures[rd->idx].type;
+    GtkWidget *editor;
+    if (type == "key") {
+        editor = make_key_grab(rd);
+    } else if (type == "button") {
+        editor = make_button_pick(rd);
+    } else if (type == "scroll") {
+        editor = make_scroll_pick(rd);
+    } else if (type == "ignore") {
+        editor = gtk_label_new("(no argument)");
+        gtk_label_set_xalign(GTK_LABEL(editor), 0.0);
+        gtk_widget_add_css_class(editor, "dim");
+    } else { // command, text, (none)
+        editor = gtk_entry_new();
+        gtk_widget_add_css_class(editor, "cell");
+        gtk_entry_set_placeholder_text(GTK_ENTRY(editor), placeholder_for(type));
+        gtk_editable_set_text(GTK_EDITABLE(editor),
+                              rd->s->cfg.gestures[rd->idx].argument.c_str());
+        g_signal_connect(editor, "changed", G_CALLBACK(on_cell_arg_changed), rd);
+    }
+    gtk_widget_set_hexpand(editor, TRUE);
+    gtk_box_append(GTK_BOX(holder), editor);
+}
+
 void on_type_changed(GObject *dd, GParamSpec *, gpointer d) {
     RowData *rd = static_cast<RowData *>(d);
-    std::string type = index_to_type(gtk_drop_down_get_selected(GTK_DROP_DOWN(dd)));
-    rd->s->cfg.gestures[rd->idx].type = type;
-    gtk_entry_set_placeholder_text(GTK_ENTRY(rd->arg), placeholder_for(type));
+    rd->s->cfg.gestures[rd->idx].type =
+        index_to_type(gtk_drop_down_get_selected(GTK_DROP_DOWN(dd)));
+    // Different types interpret the argument differently, so start the new
+    // editor blank.
+    rd->s->cfg.gestures[rd->idx].argument.clear();
+    populate_arg_editor(rd);
 }
 void select_row_idx(State *s, int idx) {
     s->selected = idx;
@@ -379,14 +545,11 @@ GtkWidget *build_row(State *s, int idx) {
     g_signal_connect(type, "notify::selected", G_CALLBACK(on_type_changed), rd);
     gtk_box_append(GTK_BOX(box), type);
 
-    GtkWidget *arg = gtk_entry_new();
-    gtk_widget_add_css_class(arg, "cell");
-    gtk_widget_set_hexpand(arg, TRUE);
-    gtk_entry_set_placeholder_text(GTK_ENTRY(arg), placeholder_for(g.type));
-    gtk_editable_set_text(GTK_EDITABLE(arg), g.argument.c_str());
-    g_signal_connect(arg, "changed", G_CALLBACK(on_arg_changed), rd);
-    gtk_box_append(GTK_BOX(box), arg);
-    rd->arg = arg;
+    GtkWidget *arg_holder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(arg_holder, TRUE);
+    gtk_box_append(GTK_BOX(box), arg_holder);
+    rd->arg_holder = arg_holder;
+    populate_arg_editor(rd);
 
     GtkEventController *fc = gtk_event_controller_focus_new();
     g_signal_connect(fc, "enter", G_CALLBACK(on_row_focus_enter), rd);
