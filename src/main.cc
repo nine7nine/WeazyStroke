@@ -34,6 +34,11 @@ namespace {
 std::atomic<bool> g_running{true};
 void on_signal(int) { g_running = false; }
 
+// SIGHUP asks the daemon to reload its gesture config (the config GUI raises it
+// after saving), so edits take effect without a restart.
+std::atomic<bool> g_reload{false};
+void on_reload(int) { g_reload = true; }
+
 // Directory of our own executable, so we can find the sibling eswl-overlay
 // binary whether running from the build tree or an install prefix.
 std::string self_dir() {
@@ -69,6 +74,69 @@ bool parse_scroll(const std::string &arg, int &dx, int &dy) {
     else
         return false;
     return true;
+}
+
+// Build the recognizer's gesture bindings from a config. Called at startup and
+// on SIGHUP reload. `keymap` is captured by reference in key/text actions, so it
+// must outlive the recognizer (it does: both live for the whole run).
+void build_bindings(GestureRecognizer &recognizer, const GestureConfig &cfg, InputInjector *inj,
+                    Keymap &keymap) {
+    for (const GestureEntry &g : cfg.gestures) {
+        std::vector<Gesture> strokes;
+        for (const std::vector<Point> &pts : g.strokes) {
+            Gesture st = Gesture::from_points(pts);
+            if (st.valid())
+                strokes.push_back(std::move(st));
+        }
+        std::string name = g.name;
+        const std::string &arg = g.argument;
+        std::function<void()> action;
+
+        if (g.type == "command") {
+            std::string command = arg;
+            action = [command] { run_command(command); };
+        } else if (g.type == "key") {
+            KeyStroke ks;
+            if (inj && keymap.from_combo(arg, ks))
+                action = [inj, ks] { send_keystroke(*inj, ks); };
+            else
+                std::fprintf(stderr, "warning: gesture '%s': cannot bind key '%s'\n", name.c_str(),
+                             arg.c_str());
+        } else if (g.type == "text") {
+            std::string text = arg;
+            if (inj && keymap.ok())
+                action = [inj, &keymap, text] { type_text(keymap, *inj, text); };
+            else
+                std::fprintf(stderr, "warning: gesture '%s': cannot bind text action\n",
+                             name.c_str());
+        } else if (g.type == "button") {
+            int n = std::atoi(arg.c_str());
+            if (inj && n > 0) {
+                Button b = static_cast<Button>(n);
+                action = [inj, b] { inj->click(b); };
+            } else
+                std::fprintf(stderr, "warning: gesture '%s': bad button '%s'\n", name.c_str(),
+                             arg.c_str());
+        } else if (g.type == "scroll") {
+            int dx = 0, dy = 0;
+            if (inj && parse_scroll(arg, dx, dy))
+                action = [inj, dx, dy] {
+                    inj->scroll(dx, dy);
+                    inj->flush();
+                };
+            else
+                std::fprintf(stderr,
+                             "warning: gesture '%s': bad scroll '%s' (use up/down/left/right "
+                             "[count])\n",
+                             name.c_str(), arg.c_str());
+        } else if (g.type == "ignore") {
+            action = [] {}; // recognized, but deliberately does nothing
+        }
+
+        if (!action)
+            action = [name] { std::printf("  (gesture '%s' has no usable action)\n", name.c_str()); };
+        recognizer.add_binding({name, std::move(strokes), std::move(action)});
+    }
 }
 
 // Captures one stroke for --record mode, then signals completion.
@@ -193,8 +261,9 @@ int main(int argc, char **argv) {
 
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
-    std::signal(SIGCHLD, SIG_IGN); // auto-reap action commands
-    std::signal(SIGPIPE, SIG_IGN); // a dead overlay must not kill the daemon
+    std::signal(SIGHUP, on_reload);  // config GUI raises this after saving
+    std::signal(SIGCHLD, SIG_IGN);   // auto-reap action commands
+    std::signal(SIGPIPE, SIG_IGN);   // a dead overlay must not kill the daemon
 
     GestureConfig cfg;
     try {
@@ -265,62 +334,7 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "warning: no XKB keymap; key/text actions disabled\n");
 
     InputInjector *inj = injector.get();
-    for (const GestureEntry &g : cfg.gestures) {
-        std::vector<Gesture> strokes;
-        for (const std::vector<Point> &pts : g.strokes) {
-            Gesture st = Gesture::from_points(pts);
-            if (st.valid())
-                strokes.push_back(std::move(st));
-        }
-        std::string name = g.name;
-        const std::string &arg = g.argument;
-        std::function<void()> action;
-
-        if (g.type == "command") {
-            std::string command = arg;
-            action = [command] { run_command(command); };
-        } else if (g.type == "key") {
-            KeyStroke ks;
-            if (inj && keymap.from_combo(arg, ks))
-                action = [inj, ks] { send_keystroke(*inj, ks); };
-            else
-                std::fprintf(stderr, "warning: gesture '%s': cannot bind key '%s'\n", name.c_str(),
-                             arg.c_str());
-        } else if (g.type == "text") {
-            std::string text = arg;
-            if (inj && keymap.ok())
-                action = [inj, &keymap, text] { type_text(keymap, *inj, text); };
-            else
-                std::fprintf(stderr, "warning: gesture '%s': cannot bind text action\n",
-                             name.c_str());
-        } else if (g.type == "button") {
-            int n = std::atoi(arg.c_str());
-            if (inj && n > 0) {
-                Button b = static_cast<Button>(n);
-                action = [inj, b] { inj->click(b); };
-            } else
-                std::fprintf(stderr, "warning: gesture '%s': bad button '%s'\n", name.c_str(),
-                             arg.c_str());
-        } else if (g.type == "scroll") {
-            int dx = 0, dy = 0;
-            if (inj && parse_scroll(arg, dx, dy))
-                action = [inj, dx, dy] {
-                    inj->scroll(dx, dy);
-                    inj->flush();
-                };
-            else
-                std::fprintf(stderr,
-                             "warning: gesture '%s': bad scroll '%s' (use up/down/left/right "
-                             "[count])\n",
-                             name.c_str(), arg.c_str());
-        } else if (g.type == "ignore") {
-            action = [] {}; // recognized, but deliberately does nothing
-        }
-
-        if (!action)
-            action = [name] { std::printf("  (gesture '%s' has no usable action)\n", name.c_str()); };
-        recognizer.add_binding({name, std::move(strokes), std::move(action)});
-    }
+    build_bindings(recognizer, cfg, inj, keymap);
     recognizer.set_reporter([](const Recognition &r) {
         if (r.matched)
             std::printf("[gesture] matched '%s' (score %.2f)\n", r.name.c_str(), r.score);
@@ -362,7 +376,19 @@ int main(int argc, char **argv) {
                 cfg.gestures.size(), trigger, screen_w, screen_h);
     if (cfg.gestures.empty())
         std::printf("no gestures yet — record one with: %s --record NAME\n", argv[0]);
-    run_loop(*source, [] { return true; });
+    run_loop(*source, [&] {
+        if (g_reload.exchange(false)) {
+            try {
+                cfg = GestureConfig::load(config_path);
+                recognizer.clear_bindings();
+                build_bindings(recognizer, cfg, inj, keymap);
+                std::printf("[reload] config reloaded: %zu gesture(s)\n", cfg.gestures.size());
+            } catch (const std::exception &e) {
+                std::fprintf(stderr, "reload failed: %s\n", e.what());
+            }
+        }
+        return true;
+    });
 
     std::printf("\nshutting down.\n");
     return 0;

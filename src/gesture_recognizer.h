@@ -35,6 +35,7 @@ public:
     explicit GestureRecognizer(Button trigger, double match_threshold = 0.7);
 
     void add_binding(GestureBinding binding);
+    void clear_bindings() { bindings_.clear(); }
     void set_reporter(std::function<void(const Recognition &)> reporter) {
         reporter_ = std::move(reporter);
     }
