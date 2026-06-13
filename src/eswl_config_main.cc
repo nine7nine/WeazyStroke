@@ -730,6 +730,10 @@ void on_activate(GtkApplication *app, gpointer data) {
     gtk_window_set_default_size(GTK_WINDOW(s->window), 720, 500);
     g_signal_connect(s->window, "realize", G_CALLBACK(on_window_realize), nullptr);
 
+    // Keep client-side decorations (window controls / draggable titlebar) via an
+    // empty headerbar — but our tabs + Save go in the window body, not here.
+    gtk_window_set_titlebar(GTK_WINDOW(s->window), gtk_header_bar_new());
+
     GtkWidget *stack = gtk_stack_new();
     gtk_widget_set_vexpand(stack, TRUE);
     gtk_stack_add_titled(GTK_STACK(stack), build_actions_page(s), "actions", "Actions");
