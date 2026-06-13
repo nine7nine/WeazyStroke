@@ -1,0 +1,14 @@
+# udev rules for easystroke-wayland.
+#
+# Grant the 'input' group read access to event devices (capture) and read-write
+# to /dev/uinput (injection). Install to /etc/udev/rules.d/ and reload with:
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# Then ensure your user is in the 'input' group:
+#   sudo usermod -aG input "$USER"   # re-login afterwards
+#
+# A later privileged systemd daemon will not need these (it runs with the
+# necessary capabilities), but they make user-space bring-up possible.
+
+KERNEL=="event*", SUBSYSTEM=="input", GROUP="input", MODE="0640"
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"

@@ -1,0 +1,60 @@
+#pragma once
+#include "gesture.h"
+#include "input_sink.h"
+
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace es {
+
+// A named gesture template and the action to run when it matches.
+struct GestureBinding {
+    std::string name;
+    Gesture stroke;
+    std::function<void()> action;
+};
+
+// Outcome of one stroke attempt — reported for logging / future recording UI.
+struct Recognition {
+    bool matched = false;
+    std::string name;   // best-matching binding (empty if none cleared threshold)
+    double score = 0.0; // best score seen, even when below threshold
+    int points = 0;     // points in the captured stroke
+};
+
+// Captures a stroke while the trigger button is held and matches it on release.
+// This is the Wayland-side replacement for the X11 StrokeHandler chain, kept
+// deliberately small for bring-up: no timeouts, instant gestures, or click
+// replay yet (replay needs the grab/suppress EvdevSource).
+class GestureRecognizer final : public InputSink {
+public:
+    explicit GestureRecognizer(Button trigger, double match_threshold = 0.7);
+
+    void add_binding(GestureBinding binding);
+    void set_reporter(std::function<void(const Recognition &)> reporter) {
+        reporter_ = std::move(reporter);
+    }
+
+    void on_button(Button button, bool pressed, Sample at) override;
+    void on_motion(Sample at, double dx, double dy) override;
+    void on_scroll(double, double, Sample) override {}
+
+    // Minimum cursor travel (px) before a press+release counts as a gesture
+    // rather than a plain click. Matches the X11 default.
+    static constexpr double kGestureMinTravel = 16.0;
+
+private:
+    Recognition recognize(const Gesture &g) const;
+
+    Button trigger_;
+    double threshold_;
+    bool recording_ = false;
+    Point origin_;
+    double max_travel_ = 0.0;
+    std::vector<Sample> samples_;
+    std::vector<GestureBinding> bindings_;
+    std::function<void(const Recognition &)> reporter_;
+};
+
+} // namespace es

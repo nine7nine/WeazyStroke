@@ -1,0 +1,33 @@
+# systemd service template for the easystroke-wayland input engine.
+#
+# This is a starting point for the "small privileged daemon" model: the engine
+# captures and injects input (which needs device access) while the GUI runs as a
+# normal user-session app and talks to it over IPC (planned).
+#
+# Install as a system service:  /etc/systemd/system/easystroke-wayland.service
+# Or as a user service:         ~/.config/systemd/user/easystroke-wayland.service
+#
+# Capabilities below are the minimum for device access without full root; tighten
+# further once the IPC boundary to the GUI exists.
+
+[Unit]
+Description=easystroke-wayland input engine
+After=systemd-udev-settle.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/eswl-daemon
+Restart=on-failure
+RestartSec=2
+
+# Hardening (review as the daemon gains an IPC surface):
+AmbientCapabilities=CAP_SYS_ADMIN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+DeviceAllow=/dev/uinput rw
+DeviceAllow=char-input rw
+
+[Install]
+WantedBy=multi-user.target

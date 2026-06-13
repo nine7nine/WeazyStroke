@@ -1,0 +1,156 @@
+#include "libinput_source.h"
+#include "button_map.h"
+#include "input_sink.h"
+
+#include <libinput.h>
+#include <libudev.h>
+
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <cerrno>
+#include <stdexcept>
+
+namespace es {
+
+namespace {
+
+// libinput opens devices on our behalf through these callbacks. Opening the
+// /dev/input/event* nodes directly works as long as the user can read them
+// (input group); the privileged daemon will be able to grab them here too.
+int open_restricted(const char *path, int flags, void * /*user_data*/) {
+    int fd = ::open(path, flags);
+    return fd < 0 ? -errno : fd;
+}
+
+void close_restricted(int fd, void * /*user_data*/) {
+    ::close(fd);
+}
+
+const libinput_interface kInterface = {open_restricted, close_restricted};
+
+} // namespace
+
+LibinputSource::LibinputSource(InputSink &sink, int screen_w, int screen_h)
+    : sink_(sink),
+      screen_w_(screen_w),
+      screen_h_(screen_h),
+      pos_{screen_w / 2.0, screen_h / 2.0} {
+    udev_ = udev_new();
+    if (!udev_)
+        throw std::runtime_error("udev_new failed");
+
+    li_ = libinput_udev_create_context(&kInterface, nullptr, udev_);
+    if (!li_) {
+        udev_unref(udev_);
+        udev_ = nullptr;
+        throw std::runtime_error("libinput_udev_create_context failed");
+    }
+
+    if (libinput_udev_assign_seat(li_, "seat0") != 0) {
+        libinput_unref(li_);
+        li_ = nullptr;
+        udev_unref(udev_);
+        udev_ = nullptr;
+        throw std::runtime_error(
+            "libinput_udev_assign_seat failed (need read access to /dev/input/*)");
+    }
+
+    // Drain the initial DEVICE_ADDED batch so callers see the device list.
+    dispatch();
+}
+
+LibinputSource::~LibinputSource() {
+    if (li_)
+        libinput_unref(li_);
+    if (udev_)
+        udev_unref(udev_);
+}
+
+int LibinputSource::fd() const {
+    return libinput_get_fd(li_);
+}
+
+void LibinputSource::clamp_position() {
+    pos_.x = std::clamp(pos_.x, 0.0, static_cast<double>(screen_w_));
+    pos_.y = std::clamp(pos_.y, 0.0, static_cast<double>(screen_h_));
+}
+
+void LibinputSource::dispatch() {
+    if (libinput_dispatch(li_) != 0)
+        return;
+    while (libinput_event *ev = libinput_get_event(li_)) {
+        handle(ev);
+        libinput_event_destroy(ev);
+    }
+}
+
+void LibinputSource::handle(libinput_event *ev) {
+    switch (libinput_event_get_type(ev)) {
+    case LIBINPUT_EVENT_DEVICE_ADDED:
+        sink_.on_device_added(libinput_device_get_name(libinput_event_get_device(ev)));
+        break;
+
+    case LIBINPUT_EVENT_DEVICE_REMOVED:
+        sink_.on_device_removed(libinput_device_get_name(libinput_event_get_device(ev)));
+        break;
+
+    case LIBINPUT_EVENT_POINTER_MOTION: {
+        libinput_event_pointer *p = libinput_event_get_pointer_event(ev);
+        double dx = libinput_event_pointer_get_dx(p);
+        double dy = libinput_event_pointer_get_dy(p);
+        pos_.x += dx;
+        pos_.y += dy;
+        clamp_position();
+        sink_.on_motion({pos_.x, pos_.y, libinput_event_pointer_get_time(p)}, dx, dy);
+        break;
+    }
+
+    case LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE: {
+        libinput_event_pointer *p = libinput_event_get_pointer_event(ev);
+        double nx = libinput_event_pointer_get_absolute_x_transformed(p, screen_w_);
+        double ny = libinput_event_pointer_get_absolute_y_transformed(p, screen_h_);
+        double dx = nx - pos_.x;
+        double dy = ny - pos_.y;
+        pos_.x = nx;
+        pos_.y = ny;
+        clamp_position();
+        sink_.on_motion({pos_.x, pos_.y, libinput_event_pointer_get_time(p)}, dx, dy);
+        break;
+    }
+
+    case LIBINPUT_EVENT_POINTER_BUTTON: {
+        libinput_event_pointer *p = libinput_event_get_pointer_event(ev);
+        uint32_t code = libinput_event_pointer_get_button(p);
+        bool pressed =
+            libinput_event_pointer_get_button_state(p) == LIBINPUT_BUTTON_STATE_PRESSED;
+        Button logical = evdev_to_logical(static_cast<uint16_t>(code));
+        if (logical)
+            sink_.on_button(logical, pressed,
+                            {pos_.x, pos_.y, libinput_event_pointer_get_time(p)});
+        break;
+    }
+
+    case LIBINPUT_EVENT_POINTER_SCROLL_WHEEL: {
+        libinput_event_pointer *p = libinput_event_get_pointer_event(ev);
+        double h = 0.0;
+        double v = 0.0;
+        if (libinput_event_pointer_has_axis(p, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL))
+            h = libinput_event_pointer_get_scroll_value_v120(
+                    p, LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL) /
+                120.0;
+        if (libinput_event_pointer_has_axis(p, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL))
+            v = libinput_event_pointer_get_scroll_value_v120(
+                    p, LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL) /
+                120.0;
+        sink_.on_scroll(h, v, {pos_.x, pos_.y, libinput_event_pointer_get_time(p)});
+        break;
+    }
+
+    default:
+        break;
+    }
+}
+
+} // namespace es
