@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- WeazyStroke app icon: a "W" drawn as a gesture stroke with easystroke's
+       blue->green direction gradient and an arrowhead at the end. -->
+  <defs>
+    <linearGradient id="wstroke" x1="50" y1="54" x2="206" y2="54" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2b5cff"/>
+      <stop offset="0.5" stop-color="#00c6c2"/>
+      <stop offset="1" stop-color="#2ad94c"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="#16161d"/>
+  <rect x="8.5" y="8.5" width="239" height="239" rx="53.5" fill="none"
+        stroke="#ffffff" stroke-opacity="0.06" stroke-width="1"/>
+
+  <g fill="none" stroke="url(#wstroke)" stroke-width="18"
+     stroke-linecap="round" stroke-linejoin="round">
+    <path d="M50 54 L94 200 L128 92 L162 200 L206 54"/>
+    <!-- arrowhead at the end (green), pointing along the final up-stroke -->
+    <path d="M189 73 L206 54 L211 79"/>
+  </g>
+</svg>
