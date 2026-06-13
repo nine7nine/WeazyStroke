@@ -224,6 +224,13 @@ spinbutton {
 }
 spinbutton > text { color: rgba(255,255,255,0.97); caret-color: rgba(255,255,255,0.97); }
 spinbutton > button { color: rgba(255,255,255,0.82); background: transparent; border: none; }
+scale { min-height: 20px; }
+scale > value { color: rgba(255,255,255,0.92); margin-left: 8px; }
+scale > trough { background-color: rgba(255,255,255,0.13); border-radius: 6px; min-height: 5px; }
+scale > trough > slider {
+  min-width: 16px; min-height: 16px; margin: -7px; border-radius: 50%;
+  background-color: rgba(255,255,255,0.9);
+}
 .dim { color: rgba(255,255,255,0.62); }
 .colhdr { color: rgba(255,255,255,0.62); font-weight: bold; }
 
@@ -270,8 +277,10 @@ void apply_appearance(State *s) {
         "transparent); }\n"
         "button.suggested-action { border-color: color-mix(in srgb, %s 75%%, transparent); color: "
         "%s; }\n"
-        "stackswitcher button:checked { color: %s; }\n",
-        gr, gg, gb, alpha, ac, ac, ac, ac, ac, ac, ac);
+        "stackswitcher button:checked { color: %s; }\n"
+        "scale > trough > highlight { background-color: %s; }\n"
+        "scale > trough > slider { background-color: %s; }\n",
+        gr, gg, gb, alpha, ac, ac, ac, ac, ac, ac, ac, ac, ac);
     gtk_css_provider_load_from_string(s->dyn_css, buf);
 }
 
