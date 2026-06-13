@@ -870,6 +870,9 @@ void on_scroll_speed_changed(GtkSpinButton *sp, gpointer d) {
 void on_scroll_invert_toggled(GtkCheckButton *cb, gpointer d) {
     static_cast<State *>(d)->cfg.scroll_invert = gtk_check_button_get_active(cb);
 }
+void on_osd_toggled(GtkCheckButton *cb, gpointer d) {
+    static_cast<State *>(d)->cfg.show_osd = gtk_check_button_get_active(cb);
+}
 
 GtkWidget *build_prefs_page(State *s) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
@@ -940,6 +943,10 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_set_halign(tw, GTK_ALIGN_START);
     g_signal_connect(tw, "value-changed", G_CALLBACK(on_trace_width_changed), s);
     gtk_grid_attach(GTK_GRID(fg), tw, 1, 0, 1, 1);
+    GtkWidget *osd = gtk_check_button_new_with_label("Show matched gesture name on screen (OSD)");
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(osd), s->cfg.show_osd);
+    g_signal_connect(osd, "toggled", G_CALLBACK(on_osd_toggled), s);
+    gtk_grid_attach(GTK_GRID(fg), osd, 0, 1, 2, 1);
     gtk_box_append(GTK_BOX(page), fg);
 
     // --- Scroll ---------------------------------------------------------

@@ -74,4 +74,15 @@ void ProcessOverlay::set_width(int px) {
         std::fprintf(pipe_, "W %d\n", px);
 }
 
+void ProcessOverlay::show_osd(const std::string &name) {
+    if (!pipe_)
+        return;
+    // Strip newlines so it stays a single command line.
+    std::string clean;
+    for (char c : name)
+        if (c != '\n' && c != '\r')
+            clean += c;
+    std::fprintf(pipe_, "O %s\n", clean.c_str());
+}
+
 } // namespace es

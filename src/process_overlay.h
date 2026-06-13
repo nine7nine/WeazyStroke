@@ -32,6 +32,9 @@ public:
     // Sets the trail line width (px) on the renderer.
     void set_width(int px);
 
+    // Flashes the matched gesture name on screen (OSD).
+    void show_osd(const std::string &name);
+
 private:
     std::FILE *pipe_ = nullptr; // write end of the overlay's stdin
     pid_t pid_ = -1;

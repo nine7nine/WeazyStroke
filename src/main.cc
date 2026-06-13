@@ -368,15 +368,6 @@ int main(int argc, char **argv) {
 
     InputInjector *inj = injector.get();
     build_bindings(recognizer, cfg, inj, keymap);
-    std::string history_path = config_dir(config_path) + "history.jsonl";
-    recognizer.set_reporter([history_path](const Recognition &r) {
-        if (r.matched)
-            std::printf("[gesture] matched '%s' (score %.2f)\n", r.name.c_str(), r.score);
-        else if (r.points > 2)
-            std::printf("[gesture] no match (best score %.2f)\n", r.score);
-        if (r.points > 2)
-            append_history(history_path, r);
-    });
 
     std::unique_ptr<ProcessOverlay> overlay_proc;
     if (overlay) {
@@ -389,6 +380,19 @@ int main(int argc, char **argv) {
             std::fprintf(stderr, "warning: overlay unavailable: %s\n", e.what());
         }
     }
+
+    std::string history_path = config_dir(config_path) + "history.jsonl";
+    ProcessOverlay *op = overlay_proc.get();
+    recognizer.set_reporter([history_path, op, &cfg](const Recognition &r) {
+        if (r.matched)
+            std::printf("[gesture] matched '%s' (score %.2f)\n", r.name.c_str(), r.score);
+        else if (r.points > 2)
+            std::printf("[gesture] no match (best score %.2f)\n", r.score);
+        if (r.points > 2)
+            append_history(history_path, r);
+        if (r.matched && op && cfg.show_osd)
+            op->show_osd(r.name);
+    });
 
     std::unique_ptr<InputSource> source;
     try {

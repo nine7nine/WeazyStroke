@@ -12,6 +12,7 @@
 #include <glib-unix.h>
 
 #include <cerrno>
+#include <cmath>
 #include <csignal>
 #include <cstdio>
 #include <cstring>
@@ -30,8 +31,10 @@ struct Overlay {
     std::vector<double> ys;
     double screen_w = 1920.0;
     double screen_h = 1080.0;
-    double width = 4.0; // trail line width (px), set via the "W" command
-    std::string inbuf;  // accumulates partial stdin lines
+    double width = 4.0;     // trail line width (px), set via the "W" command
+    std::string inbuf;      // accumulates partial stdin lines
+    std::string osd;        // matched-gesture name to flash (empty = none)
+    guint osd_timer = 0;    // timeout source clearing the OSD
 };
 
 void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data) {
@@ -43,24 +46,54 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
-    if (o->xs.size() < 2)
-        return;
-
-    const double sx = width / o->screen_w;
-    const double sy = height / o->screen_h;
-    cairo_set_line_width(cr, o->width);
-    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-    // Per-segment blue→green direction gradient, matching the record pad and
-    // easystroke's Stroke::draw (start blue, end green).
-    std::size_t n = o->xs.size();
-    for (std::size_t i = 0; i + 1 < n; ++i) {
-        double t = static_cast<double>(i) / (n - 1);
-        cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, 1.0);
-        cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
-        cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
-        cairo_stroke(cr);
+    if (o->xs.size() >= 2) {
+        const double sx = width / o->screen_w;
+        const double sy = height / o->screen_h;
+        cairo_set_line_width(cr, o->width);
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+        // Per-segment blue→green direction gradient, matching the record pad and
+        // easystroke's Stroke::draw (start blue, end green).
+        std::size_t n = o->xs.size();
+        for (std::size_t i = 0; i + 1 < n; ++i) {
+            double t = static_cast<double>(i) / (n - 1);
+            cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, 1.0);
+            cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
+            cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
+            cairo_stroke(cr);
+        }
     }
+
+    if (!o->osd.empty()) {
+        double fs = height * 0.045;
+        if (fs < 26.0)
+            fs = 26.0;
+        cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, fs);
+        cairo_text_extents_t te;
+        cairo_text_extents(cr, o->osd.c_str(), &te);
+        double pad = fs * 0.6;
+        double bw = te.width + 2 * pad, bh = te.height + pad;
+        double bx = (width - bw) / 2.0, by = height * 0.66, r = bh / 2.0;
+        cairo_new_sub_path(cr); // rounded-pill background
+        cairo_arc(cr, bx + bw - r, by + r, r, -M_PI / 2, M_PI / 2);
+        cairo_arc(cr, bx + r, by + r, r, M_PI / 2, 3 * M_PI / 2);
+        cairo_close_path(cr);
+        cairo_set_source_rgba(cr, 0.08, 0.08, 0.10, 0.80);
+        cairo_fill(cr);
+        cairo_set_source_rgba(cr, 1, 1, 1, 0.96);
+        cairo_move_to(cr, bx + pad - te.x_bearing, by + pad / 2.0 - te.y_bearing);
+        cairo_show_text(cr, o->osd.c_str());
+    }
+}
+
+gboolean osd_clear(gpointer data) {
+    Overlay *o = static_cast<Overlay *>(data);
+    o->osd.clear();
+    o->osd_timer = 0;
+    if (o->area)
+        gtk_widget_queue_draw(o->area);
+    return G_SOURCE_REMOVE;
 }
 
 void process_line(Overlay *o, const std::string &line) {
@@ -85,6 +118,15 @@ void process_line(Overlay *o, const std::string &line) {
         if (std::sscanf(line.c_str() + 1, "%lf", &w) == 1 && w > 0)
             o->width = w;
         return; // no redraw needed
+    }
+    case 'O': { // flash gesture name (OSD)
+        o->osd = line.substr(1);
+        if (!o->osd.empty() && o->osd[0] == ' ')
+            o->osd.erase(0, 1);
+        if (o->osd_timer)
+            g_source_remove(o->osd_timer);
+        o->osd_timer = g_timeout_add(1100, osd_clear, o);
+        break;
     }
     default:
         return;
