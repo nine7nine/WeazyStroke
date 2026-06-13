@@ -38,6 +38,18 @@ GestureConfig GestureConfig::load(const std::string &path) {
     if (root["trigger_button"].is_number())
         cfg.trigger_button = static_cast<Button>(root["trigger_button"].as_number());
 
+    const json::Value &s = root["settings"];
+    if (s.is_object()) {
+        if (s["match_threshold"].is_number())
+            cfg.match_threshold = s["match_threshold"].as_number();
+        if (s["trace_width"].is_number())
+            cfg.trace_width = static_cast<int>(s["trace_width"].as_number());
+        if (s["scroll_speed"].is_number())
+            cfg.scroll_speed = s["scroll_speed"].as_number();
+        if (s["scroll_invert"].is_bool())
+            cfg.scroll_invert = s["scroll_invert"].as_bool();
+    }
+
     const json::Value &gestures = root["gestures"];
     if (gestures.is_array()) {
         for (const json::Value &g : gestures.as_array()) {
@@ -91,6 +103,13 @@ GestureConfig GestureConfig::load(const std::string &path) {
 void GestureConfig::save(const std::string &path) const {
     json::Object root;
     root["trigger_button"] = json::Value(static_cast<int>(trigger_button));
+
+    json::Object settings;
+    settings["match_threshold"] = json::Value(match_threshold);
+    settings["trace_width"] = json::Value(trace_width);
+    settings["scroll_speed"] = json::Value(scroll_speed);
+    settings["scroll_invert"] = json::Value(scroll_invert);
+    root["settings"] = json::Value(std::move(settings));
 
     json::Array out_gestures;
     for (const GestureEntry &e : gestures) {

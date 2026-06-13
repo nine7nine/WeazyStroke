@@ -16,6 +16,8 @@
 #include <poll.h>
 #include <unistd.h>
 
+#include <ctime>
+
 #include <atomic>
 #include <cerrno>
 #include <cmath>
@@ -74,6 +76,32 @@ bool parse_scroll(const std::string &arg, int &dx, int &dy) {
     else
         return false;
     return true;
+}
+
+// Directory portion of a path (with trailing slash), or "" if none.
+std::string config_dir(const std::string &path) {
+    auto slash = path.find_last_of('/');
+    return slash == std::string::npos ? std::string() : path.substr(0, slash + 1);
+}
+
+// Append one recognition result to the history log (read by the GUI's History
+// tab for tuning). One JSON object per line.
+void append_history(const std::string &path, const Recognition &r) {
+    std::FILE *f = std::fopen(path.c_str(), "a");
+    if (!f)
+        return;
+    std::time_t now = std::time(nullptr);
+    char ts[16] = {0};
+    std::strftime(ts, sizeof ts, "%H:%M:%S", std::localtime(&now));
+    std::string name;
+    for (char c : r.name) { // minimal JSON string escaping
+        if (c == '"' || c == '\\')
+            name += '\\';
+        name += c;
+    }
+    std::fprintf(f, "{\"t\":\"%s\",\"matched\":%s,\"name\":\"%s\",\"score\":%.3f,\"points\":%d}\n",
+                 ts, r.matched ? "true" : "false", name.c_str(), r.score, r.points);
+    std::fclose(f);
 }
 
 // Build the recognizer's gesture bindings from a config. Called at startup and
@@ -229,7 +257,7 @@ int main(int argc, char **argv) {
     int screen_w = 1920;
     int screen_h = 1080;
     int button_override = -1;
-    double threshold = 0.6; // match score floor; pen strokes peak lower than mouse
+    double cli_threshold = -1.0; // <0 => take match_threshold from the config
     bool grab = false;
     bool overlay = false;
     std::string config_path = GestureConfig::default_path();
@@ -248,7 +276,7 @@ int main(int argc, char **argv) {
         } else if (a == "--record" && i + 1 < argc) {
             record_name = argv[++i];
         } else if (a == "--threshold" && i + 1 < argc) {
-            threshold = std::atof(argv[++i]);
+            cli_threshold = std::atof(argv[++i]);
         } else if (a == "--grab") {
             grab = true;
         } else if (a == "--overlay") {
@@ -327,6 +355,7 @@ int main(int argc, char **argv) {
         std::fprintf(stderr, "warning: uinput unavailable: %s\n", e.what());
     }
 
+    double threshold = cli_threshold >= 0 ? cli_threshold : cfg.match_threshold;
     GestureRecognizer recognizer(trigger, threshold);
 
     Keymap keymap;
@@ -335,11 +364,14 @@ int main(int argc, char **argv) {
 
     InputInjector *inj = injector.get();
     build_bindings(recognizer, cfg, inj, keymap);
-    recognizer.set_reporter([](const Recognition &r) {
+    std::string history_path = config_dir(config_path) + "history.jsonl";
+    recognizer.set_reporter([history_path](const Recognition &r) {
         if (r.matched)
             std::printf("[gesture] matched '%s' (score %.2f)\n", r.name.c_str(), r.score);
         else if (r.points > 2)
             std::printf("[gesture] no match (best score %.2f)\n", r.score);
+        if (r.points > 2)
+            append_history(history_path, r);
     });
 
     std::unique_ptr<ProcessOverlay> overlay_proc;
@@ -382,7 +414,10 @@ int main(int argc, char **argv) {
                 cfg = GestureConfig::load(config_path);
                 recognizer.clear_bindings();
                 build_bindings(recognizer, cfg, inj, keymap);
-                std::printf("[reload] config reloaded: %zu gesture(s)\n", cfg.gestures.size());
+                recognizer.set_threshold(cli_threshold >= 0 ? cli_threshold : cfg.match_threshold);
+                std::printf("[reload] config reloaded: %zu gesture(s), threshold %.2f\n",
+                            cfg.gestures.size(),
+                            cli_threshold >= 0 ? cli_threshold : cfg.match_threshold);
             } catch (const std::exception &e) {
                 std::fprintf(stderr, "reload failed: %s\n", e.what());
             }

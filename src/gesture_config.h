@@ -31,6 +31,12 @@ struct GestureEntry {
 // The on-disk configuration. Self-contained JSON; no Boost.
 struct GestureConfig {
     Button trigger_button = 3; // X11 easystroke default (right button)
+    // Tunable settings (easystroke's Preferences). Recognition + feedback knobs
+    // the daemon reads; the GUI edits them. Stored under "settings" in the JSON.
+    double match_threshold = 0.6; // recognition accuracy floor (0..1)
+    int trace_width = 4;          // overlay trail width (px)
+    double scroll_speed = 1.0;    // multiplier for scroll actions
+    bool scroll_invert = false;   // invert scroll-action direction
     std::vector<GestureEntry> gestures;
 
     // Loads from `path`. Returns a default config if the file does not exist;

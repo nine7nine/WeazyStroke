@@ -12,6 +12,8 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 
+#include <sys/stat.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -56,6 +58,9 @@ struct State {
     GtkWidget *trigger_dropdown = nullptr;
     GtkWidget *status = nullptr;
     GtkCssProvider *dyn_css = nullptr; // appearance overrides, reloaded live
+    GtkWidget *history_list = nullptr; // History tab
+    std::string history_path;
+    long history_size = -1; // last-seen size, to refresh only on change
 };
 
 void parse_hex(const std::string &hex, int &r, int &g, int &b) {
@@ -826,6 +831,10 @@ GtkWidget *build_actions_page(State *s) {
     return page;
 }
 
+void on_threshold_changed(GtkRange *r, gpointer d) {
+    static_cast<State *>(d)->cfg.match_threshold = gtk_range_get_value(r);
+}
+
 GtkWidget *build_prefs_page(State *s) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_margin_start(page, 16);
@@ -847,11 +856,32 @@ GtkWidget *build_prefs_page(State *s) {
 
     GtkWidget *note = gtk_label_new(
         "The button held to draw a gesture. On a stylus, 11 is the side button.\n"
-        "Restart the daemon after saving for changes to take effect.");
+        "Saving applies to the running daemon automatically.");
     gtk_label_set_xalign(GTK_LABEL(note), 0.0);
     gtk_widget_add_css_class(note, "dim");
     gtk_widget_set_margin_top(note, 8);
     gtk_box_append(GTK_BOX(page), note);
+
+    // --- Recognition ----------------------------------------------------
+    GtkWidget *rh = gtk_label_new("Recognition");
+    gtk_label_set_xalign(GTK_LABEL(rh), 0.0);
+    gtk_widget_add_css_class(rh, "colhdr");
+    gtk_widget_set_margin_top(rh, 22);
+    gtk_box_append(GTK_BOX(page), rh);
+
+    GtkWidget *tl = gtk_label_new("Match threshold  (higher = stricter; lower = more lenient)");
+    gtk_label_set_xalign(GTK_LABEL(tl), 0.0);
+    gtk_widget_add_css_class(tl, "dim");
+    gtk_box_append(GTK_BOX(page), tl);
+
+    GtkWidget *scale = gtk_scale_new_with_range(GTK_ORIENTATION_HORIZONTAL, 0.30, 0.90, 0.01);
+    gtk_scale_set_draw_value(GTK_SCALE(scale), TRUE);
+    gtk_scale_set_value_pos(GTK_SCALE(scale), GTK_POS_RIGHT);
+    gtk_range_set_value(GTK_RANGE(scale), s->cfg.match_threshold);
+    gtk_widget_set_size_request(scale, 320, -1);
+    gtk_widget_set_halign(scale, GTK_ALIGN_START);
+    g_signal_connect(scale, "value-changed", G_CALLBACK(on_threshold_changed), s);
+    gtk_box_append(GTK_BOX(page), scale);
 
     // --- Appearance (glass settings, like Chiguiro) ---------------------
     GtkWidget *ah = gtk_label_new("Appearance");
@@ -894,6 +924,97 @@ GtkWidget *build_prefs_page(State *s) {
     return page;
 }
 
+// --- History tab: recent recognition results (written by the daemon) --------
+
+void refresh_history(State *s) {
+    if (!s->history_list)
+        return;
+    while (GtkListBoxRow *row = gtk_list_box_get_row_at_index(GTK_LIST_BOX(s->history_list), 0))
+        gtk_list_box_remove(GTK_LIST_BOX(s->history_list), GTK_WIDGET(row));
+
+    std::ifstream in(s->history_path);
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(in, line))
+        if (!line.empty())
+            lines.push_back(line);
+
+    if (lines.empty()) {
+        GtkWidget *l = gtk_label_new("No gestures yet — draw one with the daemon running.");
+        gtk_widget_add_css_class(l, "dim");
+        gtk_label_set_xalign(GTK_LABEL(l), 0.0);
+        gtk_widget_set_margin_start(l, 6);
+        gtk_widget_set_margin_top(l, 6);
+        gtk_list_box_append(GTK_LIST_BOX(s->history_list), l);
+        return;
+    }
+
+    const std::size_t kMax = 80;
+    std::size_t start = lines.size() > kMax ? lines.size() - kMax : 0;
+    for (std::size_t i = lines.size(); i-- > start;) { // newest first
+        try {
+            json::Value v = json::Value::parse(lines[i]);
+            std::string t = v["t"].is_string() ? v["t"].as_string() : "";
+            bool matched = v["matched"].is_bool() && v["matched"].as_bool();
+            std::string name = v["name"].is_string() ? v["name"].as_string() : "";
+            double score = v["score"].is_number() ? v["score"].as_number() : 0.0;
+            char buf[256];
+            if (matched)
+                std::snprintf(buf, sizeof buf, "%s    ✓  %-20s   score %.2f", t.c_str(),
+                              name.c_str(), score);
+            else
+                std::snprintf(buf, sizeof buf, "%s    ·  no match            best %.2f", t.c_str(),
+                              score);
+            GtkWidget *l = gtk_label_new(buf);
+            gtk_label_set_xalign(GTK_LABEL(l), 0.0);
+            gtk_label_set_use_markup(GTK_LABEL(l), FALSE);
+            if (!matched)
+                gtk_widget_add_css_class(l, "dim");
+            gtk_widget_set_margin_start(l, 6);
+            gtk_widget_set_margin_top(l, 3);
+            gtk_widget_set_margin_bottom(l, 3);
+            gtk_list_box_append(GTK_LIST_BOX(s->history_list), l);
+        } catch (...) {
+        }
+    }
+}
+
+gboolean history_tick(gpointer d) {
+    State *s = static_cast<State *>(d);
+    struct stat st;
+    long sz = (stat(s->history_path.c_str(), &st) == 0) ? static_cast<long>(st.st_size) : 0;
+    if (sz != s->history_size) {
+        s->history_size = sz;
+        refresh_history(s);
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+GtkWidget *build_history_page(State *s) {
+    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_widget_set_vexpand(page, TRUE);
+    gtk_widget_set_margin_start(page, 12);
+    gtk_widget_set_margin_end(page, 12);
+    gtk_widget_set_margin_top(page, 10);
+    gtk_widget_set_margin_bottom(page, 10);
+
+    GtkWidget *hdr = gtk_label_new("Recent gestures (newest first) — watch the scores to tune the "
+                                   "match threshold in Preferences.");
+    gtk_label_set_xalign(GTK_LABEL(hdr), 0.0);
+    gtk_widget_add_css_class(hdr, "dim");
+    gtk_box_append(GTK_BOX(page), hdr);
+
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, TRUE);
+    s->history_list = gtk_list_box_new();
+    gtk_list_box_set_selection_mode(GTK_LIST_BOX(s->history_list), GTK_SELECTION_NONE);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), s->history_list);
+    gtk_box_append(GTK_BOX(page), scroll);
+
+    refresh_history(s);
+    return page;
+}
+
 void on_activate(GtkApplication *app, gpointer data) {
     State *s = static_cast<State *>(data);
     load_css();
@@ -912,6 +1033,8 @@ void on_activate(GtkApplication *app, gpointer data) {
     gtk_widget_set_vexpand(stack, TRUE);
     gtk_stack_add_titled(GTK_STACK(stack), build_actions_page(s), "actions", "Actions");
     gtk_stack_add_titled(GTK_STACK(stack), build_prefs_page(s), "preferences", "Preferences");
+    gtk_stack_add_titled(GTK_STACK(stack), build_history_page(s), "history", "History");
+    g_timeout_add_seconds(2, history_tick, s); // live-update the History tab
 
     GtkWidget *switcher = gtk_stack_switcher_new();
     gtk_stack_switcher_set_stack(GTK_STACK_SWITCHER(switcher), GTK_STACK(stack));
@@ -960,9 +1083,10 @@ int main(int argc, char **argv) {
             state.config_path = argv[++i];
 
     auto slash = state.config_path.find_last_of('/');
-    state.gui_path =
-        (slash == std::string::npos ? std::string() : state.config_path.substr(0, slash + 1)) +
-        "gui.json";
+    std::string dir =
+        slash == std::string::npos ? std::string() : state.config_path.substr(0, slash + 1);
+    state.gui_path = dir + "gui.json";
+    state.history_path = dir + "history.jsonl";
 
     try {
         state.cfg = GestureConfig::load(state.config_path);

@@ -36,6 +36,7 @@ public:
 
     void add_binding(GestureBinding binding);
     void clear_bindings() { bindings_.clear(); }
+    void set_threshold(double t) { threshold_ = t; }
     void set_reporter(std::function<void(const Recognition &)> reporter) {
         reporter_ = std::move(reporter);
     }
