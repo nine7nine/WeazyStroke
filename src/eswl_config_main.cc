@@ -215,9 +215,27 @@ button:not(.close):not(.minimize):not(.maximize):not(.titlebutton) {
 button:not(.close):not(.minimize):not(.maximize):not(.titlebutton):hover {
   border-color: rgba(255,255,255,0.30); background-color: rgba(255,255,255,0.06);
 }
+/* Force button label text light in every state (Adwaita's label color was winning). */
+button:not(.close):not(.minimize):not(.maximize):not(.titlebutton),
+button:not(.close):not(.minimize):not(.maximize):not(.titlebutton) label,
+button:not(.titlebutton):hover label, button:not(.titlebutton):active label,
+button:not(.titlebutton):focus label, button:not(.titlebutton):checked label {
+  color: rgba(255,255,255,0.96);
+}
+/* Key-grabber renders as a flat cell, like the other argument editors. */
+button.cell {
+  background: transparent; background-image: none; border: 1px solid transparent;
+  border-radius: 5px; box-shadow: none; min-height: 26px; padding: 1px 8px;
+}
+button.cell, button.cell label { color: rgba(255,255,255,0.96); }
+button.cell:hover, button.cell:focus-within {
+  border-color: rgba(255,255,255,0.30); background: rgba(255,255,255,0.05);
+}
 button.suggested-action {
   border-color: color-mix(in srgb, @accent_bg_color 70%, transparent); color: @accent_color;
 }
+button.suggested-action label { color: @accent_color; }
+checkbutton, checkbutton label { color: rgba(255,255,255,0.96); }
 spinbutton {
   background: transparent; border: 1px solid rgba(255,255,255,0.15);
   border-radius: 6px; color: rgba(255,255,255,0.97); min-height: 28px;
@@ -843,6 +861,15 @@ GtkWidget *build_actions_page(State *s) {
 void on_threshold_changed(GtkRange *r, gpointer d) {
     static_cast<State *>(d)->cfg.match_threshold = gtk_range_get_value(r);
 }
+void on_trace_width_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.trace_width = static_cast<int>(gtk_spin_button_get_value(sp));
+}
+void on_scroll_speed_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.scroll_speed = gtk_spin_button_get_value(sp);
+}
+void on_scroll_invert_toggled(GtkCheckButton *cb, gpointer d) {
+    static_cast<State *>(d)->cfg.scroll_invert = gtk_check_button_get_active(cb);
+}
 
 GtkWidget *build_prefs_page(State *s) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
@@ -891,6 +918,57 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_set_halign(scale, GTK_ALIGN_START);
     g_signal_connect(scale, "value-changed", G_CALLBACK(on_threshold_changed), s);
     gtk_box_append(GTK_BOX(page), scale);
+
+    // --- Feedback (trail) -----------------------------------------------
+    GtkWidget *fh = gtk_label_new("Feedback");
+    gtk_label_set_xalign(GTK_LABEL(fh), 0.0);
+    gtk_widget_add_css_class(fh, "colhdr");
+    gtk_widget_set_margin_top(fh, 22);
+    gtk_box_append(GTK_BOX(page), fh);
+
+    GtkWidget *fg = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(fg), 10);
+    gtk_grid_set_column_spacing(GTK_GRID(fg), 18);
+    gtk_widget_set_halign(fg, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(fg, 6);
+    GtkWidget *twl = gtk_label_new("Trail width (px)");
+    gtk_label_set_xalign(GTK_LABEL(twl), 0.0);
+    gtk_widget_set_size_request(twl, 160, -1);
+    gtk_grid_attach(GTK_GRID(fg), twl, 0, 0, 1, 1);
+    GtkWidget *tw = gtk_spin_button_new_with_range(1, 20, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(tw), s->cfg.trace_width);
+    gtk_widget_set_halign(tw, GTK_ALIGN_START);
+    g_signal_connect(tw, "value-changed", G_CALLBACK(on_trace_width_changed), s);
+    gtk_grid_attach(GTK_GRID(fg), tw, 1, 0, 1, 1);
+    gtk_box_append(GTK_BOX(page), fg);
+
+    // --- Scroll ---------------------------------------------------------
+    GtkWidget *sch = gtk_label_new("Scroll");
+    gtk_label_set_xalign(GTK_LABEL(sch), 0.0);
+    gtk_widget_add_css_class(sch, "colhdr");
+    gtk_widget_set_margin_top(sch, 22);
+    gtk_box_append(GTK_BOX(page), sch);
+
+    GtkWidget *sg = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(sg), 10);
+    gtk_grid_set_column_spacing(GTK_GRID(sg), 18);
+    gtk_widget_set_halign(sg, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(sg, 6);
+    GtkWidget *ssl = gtk_label_new("Speed");
+    gtk_label_set_xalign(GTK_LABEL(ssl), 0.0);
+    gtk_widget_set_size_request(ssl, 160, -1);
+    gtk_grid_attach(GTK_GRID(sg), ssl, 0, 0, 1, 1);
+    GtkWidget *ss = gtk_spin_button_new_with_range(0.2, 10.0, 0.2);
+    gtk_spin_button_set_digits(GTK_SPIN_BUTTON(ss), 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(ss), s->cfg.scroll_speed);
+    gtk_widget_set_halign(ss, GTK_ALIGN_START);
+    g_signal_connect(ss, "value-changed", G_CALLBACK(on_scroll_speed_changed), s);
+    gtk_grid_attach(GTK_GRID(sg), ss, 1, 0, 1, 1);
+    GtkWidget *inv = gtk_check_button_new_with_label("Invert scroll direction");
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(inv), s->cfg.scroll_invert);
+    g_signal_connect(inv, "toggled", G_CALLBACK(on_scroll_invert_toggled), s);
+    gtk_grid_attach(GTK_GRID(sg), inv, 0, 1, 2, 1);
+    gtk_box_append(GTK_BOX(page), sg);
 
     // --- Appearance (glass settings, like Chiguiro) ---------------------
     GtkWidget *ah = gtk_label_new("Appearance");

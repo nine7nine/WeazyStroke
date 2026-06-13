@@ -29,6 +29,9 @@ public:
     void add(double x, double y) override;
     void end() override;
 
+    // Sets the trail line width (px) on the renderer.
+    void set_width(int px);
+
 private:
     std::FILE *pipe_ = nullptr; // write end of the overlay's stdin
     pid_t pid_ = -1;

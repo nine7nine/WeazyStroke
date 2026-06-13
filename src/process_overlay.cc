@@ -69,4 +69,9 @@ void ProcessOverlay::end() {
         std::fputs("E\n", pipe_);
 }
 
+void ProcessOverlay::set_width(int px) {
+    if (pipe_)
+        std::fprintf(pipe_, "W %d\n", px);
+}
+
 } // namespace es

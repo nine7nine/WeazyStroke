@@ -30,7 +30,8 @@ struct Overlay {
     std::vector<double> ys;
     double screen_w = 1920.0;
     double screen_h = 1080.0;
-    std::string inbuf; // accumulates partial stdin lines
+    double width = 4.0; // trail line width (px), set via the "W" command
+    std::string inbuf;  // accumulates partial stdin lines
 };
 
 void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data) {
@@ -47,7 +48,7 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
 
     const double sx = width / o->screen_w;
     const double sy = height / o->screen_h;
-    cairo_set_line_width(cr, 4.0);
+    cairo_set_line_width(cr, o->width);
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
     // Per-segment blue→green direction gradient, matching the record pad and
@@ -78,6 +79,12 @@ void process_line(Overlay *o, const std::string &line) {
             o->ys.push_back(y);
         }
         break;
+    }
+    case 'W': { // set trail width
+        double w = 0;
+        if (std::sscanf(line.c_str() + 1, "%lf", &w) == 1 && w > 0)
+            o->width = w;
+        return; // no redraw needed
     }
     default:
         return;

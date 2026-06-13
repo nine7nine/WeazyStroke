@@ -147,12 +147,16 @@ void build_bindings(GestureRecognizer &recognizer, const GestureConfig &cfg, Inp
                              arg.c_str());
         } else if (g.type == "scroll") {
             int dx = 0, dy = 0;
-            if (inj && parse_scroll(arg, dx, dy))
-                action = [inj, dx, dy] {
-                    inj->scroll(dx, dy);
+            if (inj && parse_scroll(arg, dx, dy)) {
+                double sp = cfg.scroll_speed > 0 ? cfg.scroll_speed : 1.0;
+                int sgn = cfg.scroll_invert ? -1 : 1;
+                int sdx = static_cast<int>(std::lround(dx * sp)) * sgn;
+                int sdy = static_cast<int>(std::lround(dy * sp)) * sgn;
+                action = [inj, sdx, sdy] {
+                    inj->scroll(sdx, sdy);
                     inj->flush();
                 };
-            else
+            } else
                 std::fprintf(stderr,
                              "warning: gesture '%s': bad scroll '%s' (use up/down/left/right "
                              "[count])\n",
@@ -379,6 +383,7 @@ int main(int argc, char **argv) {
         try {
             overlay_proc =
                 std::make_unique<ProcessOverlay>(self_dir() + "/eswl-overlay", screen_w, screen_h);
+            overlay_proc->set_width(cfg.trace_width);
             recognizer.set_overlay(overlay_proc.get());
         } catch (const std::exception &e) {
             std::fprintf(stderr, "warning: overlay unavailable: %s\n", e.what());
@@ -415,6 +420,8 @@ int main(int argc, char **argv) {
                 recognizer.clear_bindings();
                 build_bindings(recognizer, cfg, inj, keymap);
                 recognizer.set_threshold(cli_threshold >= 0 ? cli_threshold : cfg.match_threshold);
+                if (overlay_proc)
+                    overlay_proc->set_width(cfg.trace_width);
                 std::printf("[reload] config reloaded: %zu gesture(s), threshold %.2f\n",
                             cfg.gestures.size(),
                             cli_threshold >= 0 ? cli_threshold : cfg.match_threshold);
