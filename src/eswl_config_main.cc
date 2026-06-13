@@ -508,9 +508,15 @@ void on_row_focus_enter(GtkEventControllerFocus *, gpointer d) {
     RowData *rd = static_cast<RowData *>(d);
     select_row_idx(rd->s, rd->idx);
 }
-void on_row_pressed(GtkGestureClick *, int, double, double, gpointer d) {
-    RowData *rd = static_cast<RowData *>(d);
-    select_row_idx(rd->s, rd->idx);
+// One click handler on the whole listbox: select whatever row was clicked,
+// anywhere on it (thumbnail, gaps, cells). Robust regardless of child widgets.
+void on_listbox_pressed(GtkGestureClick *, int, double, double y, gpointer d) {
+    State *s = static_cast<State *>(d);
+    GtkListBoxRow *row = gtk_list_box_get_row_at_y(GTK_LIST_BOX(s->listbox), static_cast<int>(y));
+    if (row) {
+        gtk_list_box_select_row(GTK_LIST_BOX(s->listbox), row);
+        s->selected = gtk_list_box_row_get_index(row);
+    }
 }
 void on_row_selected(GtkListBox *, GtkListBoxRow *row, gpointer data) {
     static_cast<State *>(data)->selected = row ? gtk_list_box_row_get_index(row) : -1;
@@ -554,12 +560,6 @@ GtkWidget *build_row(State *s, int idx) {
     GtkEventController *fc = gtk_event_controller_focus_new();
     g_signal_connect(fc, "enter", G_CALLBACK(on_row_focus_enter), rd);
     gtk_widget_add_controller(box, fc);
-
-    // Clicking anywhere on the row (thumbnail, gaps) selects it too.
-    GtkGesture *click = gtk_gesture_click_new();
-    gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(click), GTK_PHASE_CAPTURE);
-    g_signal_connect(click, "pressed", G_CALLBACK(on_row_pressed), rd);
-    gtk_widget_add_controller(box, GTK_EVENT_CONTROLLER(click));
 
     g_object_set_data_full(G_OBJECT(box), "rd", rd, free_rowdata);
     return box;
@@ -749,6 +749,9 @@ void on_record(GtkButton *, gpointer data) {
             State *st = c->r->app;
             if (c->r->pts.size() > 2 && st->selected >= 0) {
                 int sel = st->selected;
+                // Record Stroke replaces the gesture's stroke (matches the
+                // easystroke workflow and updates the thumbnail to what you drew).
+                st->cfg.gestures[sel].strokes.clear();
                 st->cfg.gestures[sel].strokes.push_back(c->r->pts);
                 rebuild_list(st);
                 select_index(st, sel);
@@ -800,6 +803,9 @@ GtkWidget *build_actions_page(State *s) {
     s->listbox = gtk_list_box_new();
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(s->listbox), GTK_SELECTION_SINGLE);
     g_signal_connect(s->listbox, "row-selected", G_CALLBACK(on_row_selected), s);
+    GtkGesture *lbclick = gtk_gesture_click_new();
+    g_signal_connect(lbclick, "pressed", G_CALLBACK(on_listbox_pressed), s);
+    gtk_widget_add_controller(s->listbox, GTK_EVENT_CONTROLLER(lbclick));
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), s->listbox);
     gtk_box_append(GTK_BOX(page), scroll);
 
