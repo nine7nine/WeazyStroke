@@ -21,12 +21,18 @@ void GestureRecognizer::on_button(Button button, bool pressed, Sample at) {
         samples_.push_back(at);
         origin_ = {at.x, at.y};
         max_travel_ = 0.0;
+        if (overlay_) {
+            overlay_->begin();
+            overlay_->add(at.x, at.y);
+        }
         return;
     }
 
     if (!recording_)
         return;
     recording_ = false;
+    if (overlay_)
+        overlay_->end();
 
     // Too little travel => this was a click, not a gesture.
     if (max_travel_ < kGestureMinTravel || samples_.size() <= 2) {
@@ -54,6 +60,8 @@ void GestureRecognizer::on_motion(Sample at, double, double) {
     if (!recording_)
         return;
     samples_.push_back(at);
+    if (overlay_)
+        overlay_->add(at.x, at.y);
     double travel = std::hypot(at.x - origin_.x, at.y - origin_.y);
     if (travel > max_travel_)
         max_travel_ = travel;

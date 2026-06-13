@@ -18,6 +18,9 @@ option(ENABLE_ASAN "Build with AddressSanitizer + UBSan" ON)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(INPUT REQUIRED IMPORTED_TARGET libinput libudev libevdev)
 pkg_check_modules(XKB REQUIRED IMPORTED_TARGET xkbcommon)
+# GTK4 + layer-shell only for the standalone overlay renderer (eswl-overlay).
+# The core engine and daemon link none of this.
+pkg_check_modules(OVERLAY REQUIRED IMPORTED_TARGET gtk4 gtk4-layer-shell-0)
 
 # Core engine: recognition + input backends. Deliberately self-contained --
 # only libc/libstdc++ and libinput/libudev. No Boost, no GUI toolkit.
@@ -31,6 +34,7 @@ add_library(eswl_core STATIC
     src/json.cc
     src/gesture_config.cc
     src/process.cc
+    src/process_overlay.cc
     src/keymap.cc
     src/evdev_source.cc
 )
@@ -39,6 +43,12 @@ target_link_libraries(eswl_core PUBLIC PkgConfig::INPUT PkgConfig::XKB)
 
 add_executable(eswl-daemon src/main.cc)
 target_link_libraries(eswl-daemon PRIVATE eswl_core)
+
+# Standalone trail renderer. Talks to the daemon over a pipe; kept out of the
+# warnings/ASan loops below since it is mostly GTK glue (GTK headers are noisy
+# under -Wpedantic, and ASan reports benign one-shot GTK allocations on exit).
+add_executable(eswl-overlay src/overlay_main.cc)
+target_link_libraries(eswl-overlay PRIVATE PkgConfig::OVERLAY)
 
 enable_testing()
 set(ESWL_TESTS recognition json config keymap trigger_gate)
@@ -71,4 +81,4 @@ if(ENABLE_ASAN)
     message(STATUS "AddressSanitizer + UBSan: ENABLED")
 endif()
 
-install(TARGETS eswl-daemon DESTINATION bin/)
+install(TARGETS eswl-daemon eswl-overlay DESTINATION bin/)

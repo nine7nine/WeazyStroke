@@ -1,6 +1,7 @@
 #pragma once
 #include "gesture.h"
 #include "input_sink.h"
+#include "trace_overlay.h"
 
 #include <functional>
 #include <string>
@@ -36,6 +37,9 @@ public:
         reporter_ = std::move(reporter);
     }
 
+    // Optional live trail renderer; nullptr (default) draws nothing.
+    void set_overlay(TraceOverlay *overlay) { overlay_ = overlay; }
+
     void on_button(Button button, bool pressed, Sample at) override;
     void on_motion(Sample at, double dx, double dy) override;
     void on_scroll(double, double, Sample) override {}
@@ -55,6 +59,7 @@ private:
     std::vector<Sample> samples_;
     std::vector<GestureBinding> bindings_;
     std::function<void(const Recognition &)> reporter_;
+    TraceOverlay *overlay_ = nullptr;
 };
 
 } // namespace es

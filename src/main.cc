@@ -10,9 +10,11 @@
 #include "keymap.h"
 #include "libinput_source.h"
 #include "process.h"
+#include "process_overlay.h"
 #include "uinput_injector.h"
 
 #include <poll.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <cerrno>
@@ -31,6 +33,19 @@ namespace {
 
 std::atomic<bool> g_running{true};
 void on_signal(int) { g_running = false; }
+
+// Directory of our own executable, so we can find the sibling eswl-overlay
+// binary whether running from the build tree or an install prefix.
+std::string self_dir() {
+    char buf[4096];
+    ssize_t n = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0)
+        return ".";
+    buf[n] = '\0';
+    std::string path(buf);
+    auto slash = path.find_last_of('/');
+    return slash == std::string::npos ? "." : path.substr(0, slash);
+}
 
 // Captures one stroke for --record mode, then signals completion.
 class RecorderSink final : public InputSink {
@@ -108,6 +123,7 @@ template <typename Pred> void run_loop(InputSource &source, Pred keep_going) {
     std::printf("                   10 pen-tip, 11 pen-button)\n");
     std::printf("  --screen WxH     screen size for pointer tracking (default 1920x1080)\n");
     std::printf("  --threshold T    match score floor 0..1 (default 0.6; lower = more lenient)\n");
+    std::printf("  --overlay        draw the live stroke trail (gtk4 layer-shell overlay)\n");
     std::printf("  --grab           grab mice (EVIOCGRAB) to suppress the trigger button;\n");
     std::printf("                   without it, capture is monitor-only and the button also clicks\n");
     std::exit(code);
@@ -123,6 +139,7 @@ int main(int argc, char **argv) {
     int button_override = -1;
     double threshold = 0.6; // match score floor; pen strokes peak lower than mouse
     bool grab = false;
+    bool overlay = false;
     std::string config_path = GestureConfig::default_path();
     std::string record_name;
 
@@ -142,6 +159,8 @@ int main(int argc, char **argv) {
             threshold = std::atof(argv[++i]);
         } else if (a == "--grab") {
             grab = true;
+        } else if (a == "--overlay") {
+            overlay = true;
         } else {
             std::fprintf(stderr, "unknown argument: %s\n", a.c_str());
             usage(argv[0], 2);
@@ -151,6 +170,7 @@ int main(int argc, char **argv) {
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
     std::signal(SIGCHLD, SIG_IGN); // auto-reap action commands
+    std::signal(SIGPIPE, SIG_IGN); // a dead overlay must not kill the daemon
 
     GestureConfig cfg;
     try {
@@ -236,6 +256,17 @@ int main(int argc, char **argv) {
         else if (r.points > 2)
             std::printf("[gesture] no match (best score %.2f)\n", r.score);
     });
+
+    std::unique_ptr<ProcessOverlay> overlay_proc;
+    if (overlay) {
+        try {
+            overlay_proc =
+                std::make_unique<ProcessOverlay>(self_dir() + "/eswl-overlay", screen_w, screen_h);
+            recognizer.set_overlay(overlay_proc.get());
+        } catch (const std::exception &e) {
+            std::fprintf(stderr, "warning: overlay unavailable: %s\n", e.what());
+        }
+    }
 
     std::unique_ptr<InputSource> source;
     try {
