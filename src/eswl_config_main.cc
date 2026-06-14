@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -930,6 +931,56 @@ void on_osd_toggled(GtkCheckButton *cb, gpointer d) {
     static_cast<State *>(d)->cfg.show_osd = gtk_check_button_get_active(cb);
 }
 
+// --- Autostart: a systemd --user service running the daemon on login --------
+std::string home_dir() {
+    const char *h = std::getenv("HOME");
+    return h ? std::string(h) : std::string(".");
+}
+std::string daemon_exe_path() {
+    char buf[4096];
+    ssize_t n = ::readlink("/proc/self/exe", buf, sizeof buf - 1);
+    if (n <= 0)
+        return "eswl-daemon";
+    buf[n] = '\0';
+    std::string p(buf);
+    auto slash = p.find_last_of('/');
+    return (slash == std::string::npos ? std::string(".") : p.substr(0, slash)) + "/eswl-daemon";
+}
+std::string service_file_path() {
+    return home_dir() + "/.config/systemd/user/weazystroke.service";
+}
+bool autostart_is_enabled() {
+    gchar *out = nullptr;
+    g_spawn_command_line_sync("systemctl --user is-enabled weazystroke.service", &out, nullptr,
+                              nullptr, nullptr);
+    bool enabled = out && g_str_has_prefix(out, "enabled");
+    g_free(out);
+    return enabled;
+}
+void write_service_file() {
+    std::error_code ec;
+    std::filesystem::create_directories(
+        std::filesystem::path(service_file_path()).parent_path(), ec);
+    std::ofstream o(service_file_path(), std::ios::trunc);
+    o << "[Unit]\nDescription=WeazyStroke gesture daemon\n"
+      << "PartOf=graphical-session.target\nAfter=graphical-session.target\n\n"
+      << "[Service]\nType=simple\nExecStart=" << daemon_exe_path() << " --overlay\n"
+      << "Restart=on-failure\nRestartSec=2\n\n"
+      << "[Install]\nWantedBy=graphical-session.target\n";
+}
+void on_autostart_toggled(GtkCheckButton *cb, gpointer d) {
+    State *s = static_cast<State *>(d);
+    if (gtk_check_button_get_active(cb)) {
+        write_service_file();
+        g_spawn_command_line_async("systemctl --user daemon-reload", nullptr);
+        g_spawn_command_line_async("systemctl --user enable --now weazystroke.service", nullptr);
+        set_status(s, "Autostart enabled (systemd user service started).");
+    } else {
+        g_spawn_command_line_async("systemctl --user disable --now weazystroke.service", nullptr);
+        set_status(s, "Autostart disabled.");
+    }
+}
+
 GtkWidget *build_prefs_page(State *s) {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_widget_set_margin_start(page, 16);
@@ -1106,6 +1157,26 @@ GtkWidget *build_prefs_page(State *s) {
                     1, 1);
 
     gtk_box_append(GTK_BOX(page), grid);
+
+    // --- System ---------------------------------------------------------
+    GtkWidget *syh = gtk_label_new("System");
+    gtk_label_set_xalign(GTK_LABEL(syh), 0.0);
+    gtk_widget_add_css_class(syh, "colhdr");
+    gtk_widget_set_margin_top(syh, 22);
+    gtk_box_append(GTK_BOX(page), syh);
+
+    GtkWidget *autostart = gtk_check_button_new_with_label("Start WeazyStroke on login");
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(autostart), autostart_is_enabled());
+    g_signal_connect(autostart, "toggled", G_CALLBACK(on_autostart_toggled), s);
+    gtk_widget_set_margin_top(autostart, 6);
+    gtk_box_append(GTK_BOX(page), autostart);
+
+    GtkWidget *asnote = gtk_label_new("Installs a systemd --user service that runs the daemon "
+                                      "(with overlay) on login.");
+    gtk_label_set_xalign(GTK_LABEL(asnote), 0.0);
+    gtk_widget_add_css_class(asnote, "dim");
+    gtk_box_append(GTK_BOX(page), asnote);
+
     return page;
 }
 
