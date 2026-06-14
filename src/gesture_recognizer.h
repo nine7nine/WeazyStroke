@@ -37,6 +37,8 @@ public:
     void add_binding(GestureBinding binding);
     void clear_bindings() { bindings_.clear(); }
     void set_threshold(double t) { threshold_ = t; }
+    // Modifiers that must be held when the trigger is pressed (mouse mode).
+    void set_required_modifiers(unsigned m) { required_mods_ = m; }
     void set_reporter(std::function<void(const Recognition &)> reporter) {
         reporter_ = std::move(reporter);
     }
@@ -47,6 +49,7 @@ public:
     void on_button(Button button, bool pressed, Sample at) override;
     void on_motion(Sample at, double dx, double dy) override;
     void on_scroll(double, double, Sample) override {}
+    void on_modifiers(unsigned mask) override { cur_mods_ = mask; }
 
     // Minimum cursor travel (px) before a press+release counts as a gesture
     // rather than a plain click. Matches the X11 default.
@@ -57,6 +60,8 @@ private:
 
     Button trigger_;
     double threshold_;
+    unsigned required_mods_ = 0; // modifiers required at trigger-press (mouse mode)
+    unsigned cur_mods_ = 0;      // current modifier state from the source
     bool recording_ = false;
     Point origin_;
     double max_travel_ = 0.0;

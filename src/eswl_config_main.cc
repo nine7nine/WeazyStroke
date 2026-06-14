@@ -904,6 +904,19 @@ GtkWidget *build_actions_page(State *s) {
 void on_threshold_changed(GtkRange *r, gpointer d) {
     static_cast<State *>(d)->cfg.match_threshold = gtk_range_get_value(r);
 }
+const char *const kModeNames[] = {"Stylus", "Mouse", "Multi-touch (coming soon)", nullptr};
+const char *const kModeValues[] = {"stylus", "mouse", "multitouch"};
+void on_mode_changed(GObject *dd, GParamSpec *, gpointer d) {
+    static_cast<State *>(d)->cfg.mode = kModeValues[gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))];
+}
+void on_mod_toggled(GtkCheckButton *cb, gpointer d) {
+    State *s = static_cast<State *>(d);
+    unsigned bit = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(cb), "bit"));
+    if (gtk_check_button_get_active(cb))
+        s->cfg.trigger_modifiers |= bit;
+    else
+        s->cfg.trigger_modifiers &= ~bit;
+}
 void on_trace_width_changed(GtkSpinButton *sp, gpointer d) {
     static_cast<State *>(d)->cfg.trace_width = static_cast<int>(gtk_spin_button_get_value(sp));
 }
@@ -924,9 +937,23 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_set_margin_top(page, 16);
     gtk_widget_set_margin_bottom(page, 16);
 
+    GtkWidget *mh = gtk_label_new("Activation Mode");
+    gtk_label_set_xalign(GTK_LABEL(mh), 0.0);
+    gtk_widget_add_css_class(mh, "colhdr");
+    gtk_box_append(GTK_BOX(page), mh);
+
+    GtkWidget *mode = gtk_drop_down_new_from_strings(kModeNames);
+    gtk_widget_set_halign(mode, GTK_ALIGN_START);
+    for (int i = 0; kModeValues[i] && i < 3; ++i)
+        if (s->cfg.mode == kModeValues[i])
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(mode), i);
+    g_signal_connect(mode, "notify::selected", G_CALLBACK(on_mode_changed), s);
+    gtk_box_append(GTK_BOX(page), mode);
+
     GtkWidget *l = gtk_label_new("Trigger button");
     gtk_label_set_xalign(GTK_LABEL(l), 0.0);
     gtk_widget_add_css_class(l, "dim");
+    gtk_widget_set_margin_top(l, 10);
     gtk_box_append(GTK_BOX(page), l);
 
     s->trigger_dropdown = gtk_drop_down_new_from_strings(kTriggerLabels);
@@ -936,8 +963,29 @@ GtkWidget *build_prefs_page(State *s) {
             gtk_drop_down_set_selected(GTK_DROP_DOWN(s->trigger_dropdown), i);
     gtk_box_append(GTK_BOX(page), s->trigger_dropdown);
 
+    GtkWidget *ml = gtk_label_new("Modifiers (Mouse mode)");
+    gtk_label_set_xalign(GTK_LABEL(ml), 0.0);
+    gtk_widget_add_css_class(ml, "dim");
+    gtk_widget_set_margin_top(ml, 10);
+    gtk_box_append(GTK_BOX(page), ml);
+
+    GtkWidget *modrow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    struct {
+        const char *label;
+        unsigned bit;
+    } mods[] = {{"Ctrl", kModCtrl}, {"Alt", kModAlt}, {"Shift", kModShift}, {"Super", kModSuper}};
+    for (auto &m : mods) {
+        GtkWidget *cb = gtk_check_button_new_with_label(m.label);
+        gtk_check_button_set_active(GTK_CHECK_BUTTON(cb),
+                                    (s->cfg.trigger_modifiers & m.bit) != 0);
+        g_object_set_data(G_OBJECT(cb), "bit", GUINT_TO_POINTER(m.bit));
+        g_signal_connect(cb, "toggled", G_CALLBACK(on_mod_toggled), s);
+        gtk_box_append(GTK_BOX(modrow), cb);
+    }
+    gtk_box_append(GTK_BOX(page), modrow);
+
     GtkWidget *note = gtk_label_new(
-        "The button held to draw a gesture. On a stylus, 11 is the side button.\n"
+        "Stylus: 11 = side button, 10 = pen tip. Mouse: pick a button + optional modifiers.\n"
         "Saving applies to the running daemon automatically.");
     gtk_label_set_xalign(GTK_LABEL(note), 0.0);
     gtk_widget_add_css_class(note, "dim");

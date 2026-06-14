@@ -15,6 +15,10 @@ public:
     virtual void on_motion(Sample at, double dx, double dy) = 0;
     virtual void on_scroll(double dx, double dy, Sample at) = 0;
 
+    // Current keyboard modifier state (Mod bits), updated as modifiers change.
+    // Used to gate the trigger in mouse mode (e.g. Super+click). Default: ignore.
+    virtual void on_modifiers(unsigned mask) { (void)mask; }
+
     virtual void on_device_added(const std::string &name) { (void)name; }
     virtual void on_device_removed(const std::string &name) { (void)name; }
 };

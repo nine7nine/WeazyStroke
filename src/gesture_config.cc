@@ -37,6 +37,10 @@ GestureConfig GestureConfig::load(const std::string &path) {
 
     if (root["trigger_button"].is_number())
         cfg.trigger_button = static_cast<Button>(root["trigger_button"].as_number());
+    if (root["mode"].is_string())
+        cfg.mode = root["mode"].as_string();
+    if (root["trigger_modifiers"].is_number())
+        cfg.trigger_modifiers = static_cast<unsigned>(root["trigger_modifiers"].as_number());
 
     const json::Value &s = root["settings"];
     if (s.is_object()) {
@@ -105,6 +109,8 @@ GestureConfig GestureConfig::load(const std::string &path) {
 void GestureConfig::save(const std::string &path) const {
     json::Object root;
     root["trigger_button"] = json::Value(static_cast<int>(trigger_button));
+    root["mode"] = json::Value(mode);
+    root["trigger_modifiers"] = json::Value(static_cast<int>(trigger_modifiers));
 
     json::Object settings;
     settings["match_threshold"] = json::Value(match_threshold);

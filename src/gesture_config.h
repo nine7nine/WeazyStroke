@@ -31,6 +31,10 @@ struct GestureEntry {
 // The on-disk configuration. Self-contained JSON; no Boost.
 struct GestureConfig {
     Button trigger_button = 3; // X11 easystroke default (right button)
+    // Gesture activation mode: "stylus" (pen tip/side button), "mouse" (a mouse
+    // button, optionally with modifiers), or "multitouch" (future).
+    std::string mode = "stylus";
+    unsigned trigger_modifiers = 0; // required modifiers for "mouse" mode (Mod bits)
     // Tunable settings (easystroke's Preferences). Recognition + feedback knobs
     // the daemon reads; the GUI edits them. Stored under "settings" in the JSON.
     double match_threshold = 0.6; // recognition accuracy floor (0..1)

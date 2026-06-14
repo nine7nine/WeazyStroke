@@ -4,6 +4,7 @@
 
 #include <libinput.h>
 #include <libudev.h>
+#include <linux/input-event-codes.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -224,6 +225,43 @@ void LibinputSource::handle(libinput_event *ev) {
         }
         // Proximity-in needs nothing more: update_tablet_pos already synced the
         // start position so the first stroke begins where the pen actually is.
+        break;
+    }
+
+    case LIBINPUT_EVENT_KEYBOARD_KEY: {
+        // Track modifier state so the recognizer can gate the trigger on it
+        // (mouse mode, e.g. Super+click). We only observe; keys pass through.
+        libinput_event_keyboard *k = libinput_event_get_keyboard_event(ev);
+        uint32_t key = libinput_event_keyboard_get_key(k);
+        bool down = libinput_event_keyboard_get_key_state(k) == LIBINPUT_KEY_STATE_PRESSED;
+        unsigned bit = 0;
+        switch (key) {
+        case KEY_LEFTCTRL:
+        case KEY_RIGHTCTRL:
+            bit = kModCtrl;
+            break;
+        case KEY_LEFTALT:
+        case KEY_RIGHTALT:
+            bit = kModAlt;
+            break;
+        case KEY_LEFTSHIFT:
+        case KEY_RIGHTSHIFT:
+            bit = kModShift;
+            break;
+        case KEY_LEFTMETA:
+        case KEY_RIGHTMETA:
+            bit = kModSuper;
+            break;
+        default:
+            break;
+        }
+        if (bit) {
+            if (down)
+                mods_ |= bit;
+            else
+                mods_ &= ~bit;
+            sink_.on_modifiers(mods_);
+        }
         break;
     }
 

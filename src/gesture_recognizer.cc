@@ -16,6 +16,9 @@ void GestureRecognizer::on_button(Button button, bool pressed, Sample at) {
         return;
 
     if (pressed) {
+        // Mouse mode: only start if the required modifiers are held.
+        if ((cur_mods_ & required_mods_) != required_mods_)
+            return;
         recording_ = true;
         samples_.clear();
         samples_.push_back(at);

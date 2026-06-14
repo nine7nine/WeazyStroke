@@ -380,6 +380,7 @@ int main(int argc, char **argv) {
 
     double threshold = cli_threshold >= 0 ? cli_threshold : cfg.match_threshold;
     GestureRecognizer recognizer(trigger, threshold);
+    recognizer.set_required_modifiers(cfg.mode == "mouse" ? cfg.trigger_modifiers : 0);
 
     Keymap keymap;
     if (!keymap.ok())
@@ -443,6 +444,7 @@ int main(int argc, char **argv) {
                 recognizer.clear_bindings();
                 build_bindings(recognizer, cfg, inj, keymap);
                 recognizer.set_threshold(cli_threshold >= 0 ? cli_threshold : cfg.match_threshold);
+                recognizer.set_required_modifiers(cfg.mode == "mouse" ? cfg.trigger_modifiers : 0);
                 if (overlay_proc)
                     overlay_proc->set_width(cfg.trace_width);
                 std::printf("[reload] config reloaded: %zu gesture(s), threshold %.2f\n",

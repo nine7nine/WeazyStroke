@@ -56,6 +56,7 @@ private:
     int screen_h_;
     Point pos_;
     std::vector<Button> pen_held_; // pen buttons/tip currently down (in proximity)
+    unsigned mods_ = 0;            // current keyboard modifier mask (kMod* bits)
 };
 
 } // namespace es

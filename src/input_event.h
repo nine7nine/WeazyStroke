@@ -10,6 +10,11 @@ namespace es {
 //   8 = back, 9 = forward
 using Button = unsigned;
 
+// Trigger modifier bits, for mouse-mode activation (e.g. Super+click). Shared by
+// the config GUI, the input source (which tracks keyboard state) and the
+// recognizer (which gates the trigger on them).
+enum : unsigned { kModCtrl = 1u, kModAlt = 2u, kModShift = 4u, kModSuper = 8u };
+
 struct Point {
     double x = 0.0;
     double y = 0.0;
