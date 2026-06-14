@@ -1036,7 +1036,7 @@ void write_service_file() {
     std::ofstream o(service_file_path(), std::ios::trunc);
     o << "[Unit]\nDescription=WeazyStroke gesture daemon\n"
       << "PartOf=graphical-session.target\nAfter=graphical-session.target\n\n"
-      << "[Service]\nType=simple\nExecStart=" << daemon_exe_path() << " --overlay\n"
+      << "[Service]\nType=simple\nExecStart=" << daemon_exe_path() << " --overlay --tray\n"
       << "Restart=on-failure\nRestartSec=2\n\n"
       << "[Install]\nWantedBy=graphical-session.target\n";
 }
