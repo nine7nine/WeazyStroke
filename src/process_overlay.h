@@ -32,7 +32,7 @@ public:
     // Sets the trail line width (px) on the renderer.
     void set_width(int px);
 
-    // Sets the trail effect: 0 plain, 1 pixel, 2 sparkle.
+    // Sets the trail effect: 0 plain, 1 glow, 2 sparkle.
     void set_effect(int effect);
 
     // Sets the completion fade-out duration (ms; 0 = instant).

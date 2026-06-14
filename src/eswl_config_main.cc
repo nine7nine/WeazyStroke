@@ -982,8 +982,8 @@ void on_scroll_invert_toggled(GtkCheckButton *cb, gpointer d) {
 void on_osd_toggled(GtkCheckButton *cb, gpointer d) {
     static_cast<State *>(d)->cfg.show_osd = gtk_check_button_get_active(cb);
 }
-const char *const kEffectNames[] = {"Plain", "Pixel", "Sparkle", nullptr};
-const char *const kEffectValues[] = {"plain", "pixel", "sparkle"};
+const char *const kEffectNames[] = {"Plain", "Glow", "Sparkle", nullptr};
+const char *const kEffectValues[] = {"plain", "glow", "sparkle"};
 void on_effect_changed(GObject *dd, GParamSpec *, gpointer d) {
     static_cast<State *>(d)->cfg.trail_effect =
         kEffectValues[gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))];

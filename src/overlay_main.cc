@@ -32,7 +32,7 @@ struct Overlay {
     double screen_w = 1920.0;
     double screen_h = 1080.0;
     double width = 4.0;     // trail line width (px), set via the "W" command
-    int effect = 0;         // 0 plain, 1 pixel, 2 sparkle (set via the "F" command)
+    int effect = 0;         // 0 plain, 1 glow, 2 sparkle (set via the "F" command)
     int fade_ms = 380;      // completion fade-out duration (set via the "D" command)
     std::string inbuf;      // accumulates partial stdin lines
     std::string osd;        // matched-gesture name to flash (empty = none)
@@ -68,41 +68,36 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
             if (i0 >= n)
                 i0 = n - 1;
         }
-        if (o->effect == 1) {
-            // Pixel: chunky 8-bit blocks on a coarse grid — hard edges, a 5-step
-            // quantized blue→green palette, one fill per grid cell (cheap).
-            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
-            double cell = o->width * 1.7;
-            if (cell < 6.0)
-                cell = 6.0;
-            bool first = true;
-            long lcx = 0, lcy = 0;
-            for (std::size_t i = i0; i < n; ++i) {
-                long cx = static_cast<long>(std::floor(o->xs[i] * sx / cell));
-                long cy = static_cast<long>(std::floor(o->ys[i] * sy / cell));
-                if (!first && cx == lcx && cy == lcy)
-                    continue;
-                first = false;
-                lcx = cx;
-                lcy = cy;
-                double t = n > 1 ? static_cast<double>(i) / (n - 1) : 0.0;
-                double qt = std::floor(t * 4.0 + 0.5) / 4.0;
-                cairo_set_source_rgba(cr, 0.0, qt, 1.0 - qt, 1.0);
-                cairo_rectangle(cr, cx * cell, cy * cell, cell - 1.0, cell - 1.0);
-                cairo_fill(cr);
-            }
-        } else {
-            // Plain: smooth blue→green gradient line (start blue, end green),
-            // matching easystroke's Stroke::draw.
+        {
+            // Line-based effects. Plain is a single smooth blue→green gradient
+            // line (start blue, end green), matching easystroke's Stroke::draw;
+            // Glow adds two wide faint underlays first for a soft bloom.
             cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
             cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-            cairo_set_line_width(cr, o->width);
-            for (std::size_t i = i0; i + 1 < n; ++i) {
-                double t = static_cast<double>(i) / (n - 1);
-                cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, 1.0);
-                cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
-                cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
-                cairo_stroke(cr);
+            // Catmull-Rom smoothing: draw a cubic curve through each pair of
+            // points (control points from the neighbours), so the trail flows
+            // instead of faceting between raw samples.
+            auto px = [&](std::size_t i) { return o->xs[i] * sx; };
+            auto py = [&](std::size_t i) { return o->ys[i] * sy; };
+            const int passes = o->effect == 1 ? 3 : 1;
+            const double wmul[3] = {4.6, 2.4, 1.0};
+            const double walpha[3] = {0.10, 0.20, 1.0};
+            for (int p = passes - 1; p >= 0; --p) {
+                int idx = o->effect == 1 ? p : 2;
+                cairo_set_line_width(cr, o->width * wmul[idx]);
+                for (std::size_t i = i0; i + 1 < n; ++i) {
+                    std::size_t ip = i > i0 ? i - 1 : i;        // previous (clamped)
+                    std::size_t in = i + 2 < n ? i + 2 : i + 1; // next-next (clamped)
+                    double c1x = px(i) + (px(i + 1) - px(ip)) / 6.0;
+                    double c1y = py(i) + (py(i + 1) - py(ip)) / 6.0;
+                    double c2x = px(i + 1) - (px(in) - px(i)) / 6.0;
+                    double c2y = py(i + 1) - (py(in) - py(i)) / 6.0;
+                    double t = static_cast<double>(i) / (n - 1);
+                    cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx]);
+                    cairo_move_to(cr, px(i), py(i));
+                    cairo_curve_to(cr, c1x, c1y, c2x, c2y, px(i + 1), py(i + 1));
+                    cairo_stroke(cr);
+                }
             }
             if (o->effect == 2) {
                 // Sparkle: sparse hard square pixels (white/green) with discrete
@@ -239,7 +234,7 @@ void process_line(Overlay *o, const std::string &line) {
             o->width = w;
         return; // no redraw needed
     }
-    case 'F': { // set trail effect: 0 plain, 1 pixel, 2 sparkle
+    case 'F': { // set trail effect: 0 plain, 1 glow, 2 sparkle
         int e = 0;
         if (std::sscanf(line.c_str() + 1, "%d", &e) == 1)
             o->effect = e;

@@ -111,7 +111,7 @@ bool parse_scroll(const std::string &arg, int &dx, int &dy) {
 
 // Trail effect name -> overlay effect id.
 int effect_id(const std::string &e) {
-    if (e == "pixel" || e == "glow") // "glow" kept as a legacy alias
+    if (e == "glow")
         return 1;
     if (e == "sparkle")
         return 2;

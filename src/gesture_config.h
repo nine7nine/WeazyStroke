@@ -42,7 +42,7 @@ struct GestureConfig {
     double scroll_speed = 1.0;    // multiplier for scroll actions
     bool scroll_invert = false;   // invert scroll-action direction
     bool show_osd = false;          // flash the matched gesture name on screen
-    std::string trail_effect = "plain"; // overlay bling: "plain" | "pixel" | "sparkle"
+    std::string trail_effect = "plain"; // overlay bling: "plain" | "glow" | "sparkle"
     int trail_fade_ms = 380;            // completion fade-out duration (ms; 0 = instant)
     std::vector<GestureEntry> gestures;
 
