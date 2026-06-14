@@ -149,6 +149,17 @@ void draw_thumb(GtkDrawingArea *, cairo_t *cr, int w, int h, gpointer data) {
         cairo_line_to(cr, ox + pts[i + 1].x * sc, oy + pts[i + 1].y * sc);
         cairo_stroke(cr);
     }
+
+    // Badge showing how many examples this gesture has, if more than one.
+    if (strokes.size() > 1) {
+        char badge[8];
+        std::snprintf(badge, sizeof badge, "×%zu", strokes.size());
+        cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 11);
+        cairo_set_source_rgba(cr, 1, 1, 1, 0.65);
+        cairo_move_to(cr, 3, h - 4);
+        cairo_show_text(cr, badge);
+    }
 }
 
 // ----- Styling --------------------------------------------------------------
@@ -807,9 +818,12 @@ void on_record(GtkButton *, gpointer data) {
     GtkWidget *buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_widget_set_halign(buttons, GTK_ALIGN_END);
     GtkWidget *cancel = gtk_button_new_with_label("Cancel");
-    GtkWidget *ok = gtk_button_new_with_label("Save stroke");
+    GtkWidget *add = gtk_button_new_with_label("Add example");
+    GtkWidget *replace = gtk_button_new_with_label("Replace stroke");
+    gtk_widget_add_css_class(replace, "suggested-action");
     gtk_box_append(GTK_BOX(buttons), cancel);
-    gtk_box_append(GTK_BOX(buttons), ok);
+    gtk_box_append(GTK_BOX(buttons), add);
+    gtk_box_append(GTK_BOX(buttons), replace);
 
     gtk_box_append(GTK_BOX(box), area);
     gtk_box_append(GTK_BOX(box), buttons);
@@ -822,27 +836,31 @@ void on_record(GtkButton *, gpointer data) {
                      G_CALLBACK(+[](GtkButton *, gpointer d) { gtk_window_destroy(GTK_WINDOW(d)); }),
                      dlg);
 
+    // "Replace stroke" sets the gesture's only example; "Add example" appends one
+    // (multi-template matching, like recording the same gesture several times).
     struct OkCtx {
         RecordState *r;
         GtkWidget *dlg;
+        bool append;
     };
-    OkCtx *ctx = new OkCtx{r, dlg};
-    g_signal_connect_data(
-        ok, "clicked", G_CALLBACK(+[](GtkButton *, gpointer d) {
-            OkCtx *c = static_cast<OkCtx *>(d);
-            State *st = c->r->app;
-            if (c->r->pts.size() > 2 && st->selected >= 0) {
-                int sel = st->selected;
-                // Record Stroke replaces the gesture's stroke (matches the
-                // easystroke workflow and updates the thumbnail to what you drew).
+    auto save_cb = +[](GtkButton *, gpointer d) {
+        OkCtx *c = static_cast<OkCtx *>(d);
+        State *st = c->r->app;
+        if (c->r->pts.size() > 2 && st->selected >= 0) {
+            int sel = st->selected;
+            if (!c->append)
                 st->cfg.gestures[sel].strokes.clear();
-                st->cfg.gestures[sel].strokes.push_back(c->r->pts);
-                rebuild_list(st);
-                select_index(st, sel);
-            }
-            gtk_window_destroy(GTK_WINDOW(c->dlg));
-        }),
-        ctx, +[](gpointer d, GClosure *) { delete static_cast<OkCtx *>(d); }, GConnectFlags(0));
+            st->cfg.gestures[sel].strokes.push_back(c->r->pts);
+            rebuild_list(st);
+            select_index(st, sel);
+        }
+        gtk_window_destroy(GTK_WINDOW(c->dlg));
+    };
+    auto free_okctx = +[](gpointer d, GClosure *) { delete static_cast<OkCtx *>(d); };
+    g_signal_connect_data(add, "clicked", G_CALLBACK(save_cb), new OkCtx{r, dlg, true}, free_okctx,
+                          GConnectFlags(0));
+    g_signal_connect_data(replace, "clicked", G_CALLBACK(save_cb), new OkCtx{r, dlg, false},
+                          free_okctx, GConnectFlags(0));
 
     gtk_window_present(GTK_WINDOW(dlg));
 }
