@@ -33,6 +33,7 @@ struct Overlay {
     double screen_h = 1080.0;
     double width = 4.0;     // trail line width (px), set via the "W" command
     int effect = 0;         // 0 plain, 1 glow, 2 sparkle (set via the "F" command)
+    int fade_ms = 380;      // completion fade-out duration (set via the "D" command)
     std::string inbuf;      // accumulates partial stdin lines
     std::string osd;        // matched-gesture name to flash (empty = none)
     guint osd_timer = 0;    // timeout source clearing the OSD
@@ -143,7 +144,7 @@ void cancel_fade(Overlay *o) {
 
 gboolean fade_cb(GtkWidget *, GdkFrameClock *, gpointer data) {
     Overlay *o = static_cast<Overlay *>(data);
-    const double dur_us = 380000.0; // 380ms
+    const double dur_us = o->fade_ms * 1000.0;
     double p = static_cast<double>(g_get_monotonic_time() - o->fade_start) / dur_us;
     if (p >= 1.0) {
         o->fading = false;
@@ -164,7 +165,7 @@ gboolean fade_cb(GtkWidget *, GdkFrameClock *, gpointer data) {
 // Begin the completion fade-out (or clear immediately if there's nothing to show).
 void start_fade(Overlay *o) {
     cancel_fade(o);
-    if (o->xs.size() < 2 || !o->area) {
+    if (o->xs.size() < 2 || !o->area || o->fade_ms <= 0) {
         o->xs.clear();
         o->ys.clear();
         if (o->area)
@@ -216,6 +217,12 @@ void process_line(Overlay *o, const std::string &line) {
         int e = 0;
         if (std::sscanf(line.c_str() + 1, "%d", &e) == 1)
             o->effect = e;
+        return;
+    }
+    case 'D': { // set completion fade-out duration (ms)
+        int d = 0;
+        if (std::sscanf(line.c_str() + 1, "%d", &d) == 1 && d >= 0)
+            o->fade_ms = d;
         return;
     }
     case 'O': { // flash gesture name (OSD)

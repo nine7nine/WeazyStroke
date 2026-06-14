@@ -35,6 +35,9 @@ public:
     // Sets the trail effect: 0 plain, 1 glow, 2 sparkle.
     void set_effect(int effect);
 
+    // Sets the completion fade-out duration (ms; 0 = instant).
+    void set_fade_ms(int ms);
+
     // Flashes the matched gesture name on screen (OSD).
     void show_osd(const std::string &name);
 

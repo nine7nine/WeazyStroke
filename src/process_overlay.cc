@@ -79,6 +79,11 @@ void ProcessOverlay::set_effect(int effect) {
         std::fprintf(pipe_, "F %d\n", effect);
 }
 
+void ProcessOverlay::set_fade_ms(int ms) {
+    if (pipe_)
+        std::fprintf(pipe_, "D %d\n", ms);
+}
+
 void ProcessOverlay::show_osd(const std::string &name) {
     if (!pipe_)
         return;

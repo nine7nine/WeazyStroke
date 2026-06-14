@@ -438,6 +438,7 @@ int main(int argc, char **argv) {
                 std::make_unique<ProcessOverlay>(self_dir() + "/eswl-overlay", screen_w, screen_h);
             overlay_proc->set_width(cfg.trace_width);
             overlay_proc->set_effect(effect_id(cfg.trail_effect));
+            overlay_proc->set_fade_ms(cfg.trail_fade_ms);
             recognizer.set_overlay(overlay_proc.get());
         } catch (const std::exception &e) {
             std::fprintf(stderr, "warning: overlay unavailable: %s\n", e.what());
@@ -492,6 +493,7 @@ int main(int argc, char **argv) {
                 if (overlay_proc) {
                     overlay_proc->set_width(cfg.trace_width);
                     overlay_proc->set_effect(effect_id(cfg.trail_effect));
+                    overlay_proc->set_fade_ms(cfg.trail_fade_ms);
                 }
                 std::printf("[reload] config reloaded: %zu gesture(s), threshold %.2f\n",
                             cfg.gestures.size(),

@@ -988,6 +988,9 @@ void on_effect_changed(GObject *dd, GParamSpec *, gpointer d) {
     static_cast<State *>(d)->cfg.trail_effect =
         kEffectValues[gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))];
 }
+void on_fade_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.trail_fade_ms = static_cast<int>(gtk_spin_button_get_value(sp));
+}
 
 // --- Autostart: a systemd --user service running the daemon on login --------
 std::string home_dir() {
@@ -1147,17 +1150,6 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_check_button_set_active(GTK_CHECK_BUTTON(osd), s->cfg.show_osd);
     g_signal_connect(osd, "toggled", G_CALLBACK(on_osd_toggled), s);
     gtk_grid_attach(GTK_GRID(fg), osd, 0, 1, 2, 1);
-    GtkWidget *efl = gtk_label_new("Trail effect");
-    gtk_label_set_xalign(GTK_LABEL(efl), 0.0);
-    gtk_widget_set_size_request(efl, 160, -1);
-    gtk_grid_attach(GTK_GRID(fg), efl, 0, 2, 1, 1);
-    GtkWidget *eff = gtk_drop_down_new_from_strings(kEffectNames);
-    gtk_widget_set_halign(eff, GTK_ALIGN_START);
-    for (guint i = 0; i < G_N_ELEMENTS(kEffectValues); ++i)
-        if (s->cfg.trail_effect == kEffectValues[i])
-            gtk_drop_down_set_selected(GTK_DROP_DOWN(eff), i);
-    g_signal_connect(eff, "notify::selected", G_CALLBACK(on_effect_changed), s);
-    gtk_grid_attach(GTK_GRID(fg), eff, 1, 2, 1, 1);
     gtk_box_append(GTK_BOX(page), fg);
 
     // --- Scroll ---------------------------------------------------------
@@ -1224,6 +1216,22 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_grid_attach(GTK_GRID(grid),
                     make_color_btn(s->appearance.accent_color, G_CALLBACK(on_accent_color), s), 1, 2,
                     1, 1);
+
+    row_label("Trail effect", 3);
+    GtkWidget *eff = gtk_drop_down_new_from_strings(kEffectNames);
+    gtk_widget_set_halign(eff, GTK_ALIGN_START);
+    for (guint i = 0; i < G_N_ELEMENTS(kEffectValues); ++i)
+        if (s->cfg.trail_effect == kEffectValues[i])
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(eff), i);
+    g_signal_connect(eff, "notify::selected", G_CALLBACK(on_effect_changed), s);
+    gtk_grid_attach(GTK_GRID(grid), eff, 1, 3, 1, 1);
+
+    row_label("End transition (ms)", 4);
+    GtkWidget *fade = gtk_spin_button_new_with_range(0, 1500, 20);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(fade), s->cfg.trail_fade_ms);
+    gtk_widget_set_halign(fade, GTK_ALIGN_START);
+    g_signal_connect(fade, "value-changed", G_CALLBACK(on_fade_changed), s);
+    gtk_grid_attach(GTK_GRID(grid), fade, 1, 4, 1, 1);
 
     gtk_box_append(GTK_BOX(page), grid);
 
