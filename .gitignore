@@ -5,3 +5,7 @@ compile_commands.json
 *.a
 *.swp
 .cache/
+
+# core dumps
+core
+core.*
