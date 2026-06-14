@@ -58,51 +58,53 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
         const double sx = width / o->screen_w;
         const double sy = height / o->screen_h;
         const std::size_t n = o->xs.size();
-        const double fa = o->fading ? 1.0 - o->fade : 1.0; // global fade-out alpha
-        const double gexp = (o->effect == 1 && o->fading) ? 1.0 + o->fade * 0.9 : 1.0; // glow bloom
+
+        // Completion: the trail's start retracts into the end point — the line
+        // un-draws itself. i0 advances 0 → n-1 over the animation (smoothstep).
+        std::size_t i0 = 0;
+        if (o->fading) {
+            double e = o->fade * o->fade * (3.0 - 2.0 * o->fade);
+            i0 = static_cast<std::size_t>(e * (n - 1));
+            if (i0 >= n)
+                i0 = n - 1;
+        }
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
 
-        // The trail is a per-segment blue→green direction gradient (start blue,
-        // end green), matching easystroke's Stroke::draw. Glow draws extra wide,
-        // faint underlays first for a bloom.
+        // Per-segment blue→green direction gradient (start blue, end green), like
+        // easystroke's Stroke::draw. Glow draws extra wide faint underlays first.
         const int passes = o->effect == 1 ? 3 : 1;
         const double wmul[3] = {4.6, 2.4, 1.0};
         const double walpha[3] = {0.10, 0.20, 1.0};
         for (int p = passes - 1; p >= 0; --p) {
-            // p indexes from the core (0) outward; draw widest/faintest first.
             int idx = o->effect == 1 ? p : 2;
-            cairo_set_line_width(cr, o->width * wmul[idx] * gexp);
-            for (std::size_t i = 0; i + 1 < n; ++i) {
+            cairo_set_line_width(cr, o->width * wmul[idx]);
+            for (std::size_t i = i0; i + 1 < n; ++i) {
                 double t = static_cast<double>(i) / (n - 1);
-                cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx] * fa);
+                cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx]);
                 cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
                 cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
                 cairo_stroke(cr);
             }
         }
 
-        if (o->effect == 2) { // sparkle: head dots while drawing; scatter (burst) on completion
-            const double spread = 1.0 + o->fade * 3.5;
-            const double grow = 1.0 + o->fade * 1.2;
-            for (std::size_t i = 0; i < n; ++i) {
+        if (o->effect == 2) { // sparkle on the visible head + the retracting front
+            for (std::size_t i = i0; i < n; ++i) {
+                double age = n > 1 ? static_cast<double>(n - 1 - i) / (n - 1) : 0.0;
                 double a;
-                if (o->fading) {
-                    a = 1.0; // the whole trail sparkles during the burst
-                } else {
-                    double age = n > 1 ? static_cast<double>(n - 1 - i) / (n - 1) : 0.0;
-                    if (age > 0.45)
-                        continue;
+                if (i0 > 0 && i < i0 + 3)
+                    a = 1.0; // bright sparkles where the line is being drawn back
+                else if (age > 0.45)
+                    continue;
+                else
                     a = 1.0 - age / 0.45;
-                }
                 unsigned h = static_cast<unsigned>(i) * 2654435761u + 12345u;
                 double jx = ((h & 0xff) / 255.0 - 0.5) * 16.0;
                 double jy = (((h >> 8) & 0xff) / 255.0 - 0.5) * 16.0;
                 double sz = 1.0 + ((h >> 16) & 0x7) / 7.0 * 2.4;
                 double t = n > 1 ? static_cast<double>(i) / (n - 1) : 0.0;
-                cairo_set_source_rgba(cr, 0.45 + 0.5 * t, 1.0, 0.55 + 0.4 * (1.0 - t), a * 0.85 * fa);
-                cairo_arc(cr, o->xs[i] * sx + jx * spread, o->ys[i] * sy + jy * spread, sz * grow, 0,
-                          2 * M_PI);
+                cairo_set_source_rgba(cr, 0.45 + 0.5 * t, 1.0, 0.55 + 0.4 * (1.0 - t), a * 0.85);
+                cairo_arc(cr, o->xs[i] * sx + jx, o->ys[i] * sy + jy, sz, 0, 2 * M_PI);
                 cairo_fill(cr);
             }
         }
