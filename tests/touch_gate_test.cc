@@ -35,9 +35,11 @@ int main() {
         TouchGate g;
         g.configure(TouchEdge::Right, W, H, BAND);
         assert(g.on_down(0, 995, 400) == D::Anchor);
+        assert(g.is_anchor(0));
         assert(g.on_down(1, 500, 400) == D::Draw);
         assert(g.is_draw(1));
         assert(!g.is_draw(0)); // the anchor never draws
+        assert(!g.is_anchor(1)); // ...and the draw finger is not the anchor
         assert(g.on_up(1) == U::Finalize);
         assert(!g.is_draw(1));
         // Anchor still held -> a second stroke can be drawn without re-anchoring.
@@ -67,12 +69,13 @@ int main() {
         assert(!g.is_draw(1)); // session reset; the stale draw slot no longer draws
     }
 
-    // Anchor lifts with no draw in progress -> just ignored (nothing to cancel).
+    // Anchor lifts with no draw in progress -> ends the session (no cancel).
     {
         TouchGate g;
         g.configure(TouchEdge::Right, W, H, BAND);
         assert(g.on_down(0, 995, 400) == D::Anchor);
-        assert(g.on_up(0) == U::Ignore);
+        assert(g.on_up(0) == U::EndSession);
+        assert(!g.is_anchor(0)); // session reset
     }
 
     // The draw finger must come down *after* the anchor: a finger placed before

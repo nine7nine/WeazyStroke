@@ -3,6 +3,10 @@
 //   B            begin a new stroke (clear)
 //   P <x> <y>    append a point (in the daemon's screen-pixel space)
 //   E            end the stroke (clear the trail)
+//   A <x> <y>    show/move the touch "armed" cue (expanding ring) at a point
+//   a            hide the touch armed cue (shrink + fade out)
+//   R <px>       set the armed-cue ring radius
+//   G <ms> <ms>  set the armed-cue grow-out and shrink/fade-out durations
 // EOF on stdin or SIGTERM exits. Kept in its own process so the input engine
 // links no GUI toolkit and an overlay crash can't take down input capture.
 
@@ -43,6 +47,21 @@ struct Overlay {
     double fade = 0.0;
     gint64 fade_start = 0;
     guint fade_tick = 0;
+    // Touch "armed" cue: an expanding ring at the held anchor point, animated
+    // continuously by anchor_tick while anchor_on (set via the "A"/"a" commands).
+    bool anchor_on = false;        // armed: growing out / held
+    bool anchor_closing = false;   // released: playing the shrink+fade out
+    double ax = 0.0;
+    double ay = 0.0;
+    double anchor_r = 90.0;        // ring radius (px), set via the "R" command
+    double anchor_grow_ms = 450.0; // grow-out duration (set via "G")
+    double anchor_out_ms = 220.0;  // release shrink+fade duration (set via "G")
+    gint64 anchor_start = 0;       // when the grow (re)started
+    gint64 anchor_close_start = 0; // when the release animation started
+    double anchor_close_r = 0.0;   // radius at release (shrink from)
+    double anchor_close_a = 0.0;   // alpha at release (fade from)
+    double anchor_close_t = 0.0;   // colour progress at release (green->blue out)
+    guint anchor_tick = 0;
 };
 
 void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data) {
@@ -129,6 +148,77 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
         cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT); // restore for OSD text
     }
 
+    // Touch armed cue: once the anchor finger settles (stops dragging) and is
+    // held, a ring grows outward from that point and holds as a halo large
+    // enough to be seen around the fingertip. Dragging restarts the grow (the
+    // daemon resets anchor_start on a significant move). No centre dot — it would
+    // sit under the finger anyway.
+    if (o->anchor_on || o->anchor_closing) {
+        const double sx = width / o->screen_w;
+        const double sy = height / o->screen_h;
+        double cx = o->ax * sx, cy = o->ay * sy;
+        gint64 now = g_get_monotonic_time();
+        double r, a, t; // radius, alpha, colour progress (0 = blue, 1 = green)
+        if (o->anchor_closing) {
+            // Release: shrink + fade out, colour easing green->blue on the way.
+            double cp = static_cast<double>(now - o->anchor_close_start) / (o->anchor_out_ms * 1e3);
+            double e = cp < 1.0 ? 1.0 - cp : 0.0;
+            r = o->anchor_close_r * e;
+            a = o->anchor_close_a * e;
+            t = o->anchor_close_t * e;
+        } else {
+            // Held: grow out (smoothstep) to the configured radius, colour easing
+            // blue->green as it expands; then hold.
+            double grow = static_cast<double>(now - o->anchor_start) / (o->anchor_grow_ms * 1e3);
+            if (grow > 1.0)
+                grow = 1.0;
+            double ease = grow * grow * (3.0 - 2.0 * grow);
+            r = ease * o->anchor_r;
+            a = ease * 0.65;
+            t = ease;
+        }
+        if (r >= 0.5 && a > 0.001) {
+            // Same blue->green direction colour as the trail: rgba(0, t, 1-t).
+            const double cg = t, cb = 1.0 - t;
+            cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+            if (o->effect == 2) {
+                // Sparkle: hard squares dotted around the circumference.
+                cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+                const int nseg = 40;
+                for (int i = 0; i < nseg; ++i) {
+                    unsigned h = static_cast<unsigned>(i) * 2654435761u + 12345u;
+                    if ((h & 1u) == 0u)
+                        continue; // ~half off -> sparse
+                    double ang = static_cast<double>(i) / nseg * 2 * M_PI;
+                    int sz = 3 + static_cast<int>((h >> 8) & 1u);
+                    double jx = static_cast<double>(static_cast<int>((h >> 1) & 3u) - 1);
+                    double jy = static_cast<double>(static_cast<int>((h >> 4) & 3u) - 1);
+                    if ((h >> 10) & 1u)
+                        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, a);
+                    else
+                        cairo_set_source_rgba(cr, 0.0, cg, cb, a);
+                    cairo_rectangle(cr, cx + std::cos(ang) * r + jx, cy + std::sin(ang) * r + jy, sz,
+                                    sz);
+                    cairo_fill(cr);
+                }
+                cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT);
+            } else {
+                // Plain = one stroke; Glow = two wide faint underlays + the line.
+                const int passes = o->effect == 1 ? 3 : 1;
+                const double wmul[3] = {4.6, 2.4, 1.0};
+                const double walpha[3] = {0.10, 0.20, 1.0};
+                for (int p = passes - 1; p >= 0; --p) {
+                    int idx = o->effect == 1 ? p : 2;
+                    cairo_set_line_width(cr, o->width * wmul[idx]);
+                    cairo_set_source_rgba(cr, 0.0, cg, cb, a * walpha[idx]);
+                    cairo_new_sub_path(cr);
+                    cairo_arc(cr, cx, cy, r, 0, 2 * M_PI);
+                    cairo_stroke(cr);
+                }
+            }
+        }
+    }
+
     if (!o->osd.empty()) {
         double fs = height * 0.020;
         if (fs < 20.0)
@@ -199,6 +289,29 @@ void start_fade(Overlay *o) {
     o->fade_tick = gtk_widget_add_tick_callback(o->area, fade_cb, o, nullptr);
 }
 
+// Redraws every frame while the anchor cue is shown, so the ring keeps pulsing;
+// removes itself once the cue is hidden.
+gboolean anchor_cb(GtkWidget *, GdkFrameClock *, gpointer data) {
+    Overlay *o = static_cast<Overlay *>(data);
+    if (o->anchor_closing) {
+        double cp = static_cast<double>(g_get_monotonic_time() - o->anchor_close_start) /
+                    (o->anchor_out_ms * 1e3);
+        if (cp >= 1.0) { // shrink+fade done -> stop ticking and clear
+            o->anchor_closing = false;
+            o->anchor_tick = 0;
+            if (o->area)
+                gtk_widget_queue_draw(o->area);
+            return G_SOURCE_REMOVE;
+        }
+    } else if (!o->anchor_on) {
+        o->anchor_tick = 0;
+        return G_SOURCE_REMOVE;
+    }
+    if (o->area)
+        gtk_widget_queue_draw(o->area);
+    return G_SOURCE_CONTINUE;
+}
+
 gboolean osd_clear(gpointer data) {
     Overlay *o = static_cast<Overlay *>(data);
     o->osd.clear();
@@ -245,6 +358,56 @@ void process_line(Overlay *o, const std::string &line) {
         if (std::sscanf(line.c_str() + 1, "%d", &d) == 1 && d >= 0)
             o->fade_ms = d;
         return;
+    }
+    case 'A': { // anchor cue on/move: ring grows once the finger settles
+        double x = 0, y = 0;
+        if (std::sscanf(line.c_str() + 1, "%lf %lf", &x, &y) == 2) {
+            // Restart the grow on first show or a real drag (ignore tiny jitter),
+            // so the ring stays small while moving and grows out once held still.
+            bool moved = std::fabs(x - o->ax) > 6.0 || std::fabs(y - o->ay) > 6.0;
+            if (!o->anchor_on || moved)
+                o->anchor_start = g_get_monotonic_time();
+            o->anchor_on = true;
+            o->anchor_closing = false; // re-armed before a previous close finished
+            o->ax = x;
+            o->ay = y;
+            if (!o->anchor_tick && o->area)
+                o->anchor_tick = gtk_widget_add_tick_callback(o->area, anchor_cb, o, nullptr);
+        }
+        break;
+    }
+    case 'a': // anchor cue off -> shrink + fade out from the current size
+        if (o->anchor_on) {
+            double grow = static_cast<double>(g_get_monotonic_time() - o->anchor_start) /
+                          (o->anchor_grow_ms * 1e3);
+            if (grow > 1.0)
+                grow = 1.0;
+            double ease = grow * grow * (3.0 - 2.0 * grow);
+            o->anchor_close_r = ease * o->anchor_r;
+            o->anchor_close_a = ease * 0.65;
+            o->anchor_close_t = ease; // colour eases green->blue from here
+            o->anchor_on = false;
+            o->anchor_closing = true;
+            o->anchor_close_start = g_get_monotonic_time();
+            if (!o->anchor_tick && o->area)
+                o->anchor_tick = gtk_widget_add_tick_callback(o->area, anchor_cb, o, nullptr);
+        }
+        break;
+    case 'R': { // set the anchor-ring radius (px)
+        int r = 0;
+        if (std::sscanf(line.c_str() + 1, "%d", &r) == 1 && r > 0)
+            o->anchor_r = r;
+        return; // no redraw needed
+    }
+    case 'G': { // set anchor-ring animation timing: grow_ms out_ms
+        int grow = 0, out = 0;
+        if (std::sscanf(line.c_str() + 1, "%d %d", &grow, &out) == 2) {
+            if (grow > 0)
+                o->anchor_grow_ms = grow;
+            if (out > 0)
+                o->anchor_out_ms = out;
+        }
+        return; // no redraw needed
     }
     case 'O': { // flash gesture name (OSD)
         o->osd = line.substr(1);

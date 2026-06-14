@@ -52,6 +52,8 @@ public:
     void configure_touch(TouchEdge edge, int screen_w, int screen_h, int band_px) {
         touch_.configure(edge, screen_w, screen_h, band_px);
     }
+    // Whether to show the edge-hold "armed" ring cue on the overlay.
+    void set_touch_cue(bool on) { touch_cue_ = on; }
 
     // Debounce the trigger release by `ms` (0 = off). For the pen tip, which
     // chatters under light pressure: a release that is followed by a press
@@ -102,6 +104,7 @@ private:
     std::vector<Sample> samples_;
     // Edge-anchored two-finger touch path (independent of the button path above).
     TouchGate touch_;
+    bool touch_cue_ = true; // show the edge-hold ring cue on the overlay
     std::vector<Sample> touch_samples_;
     Point touch_origin_;
     double touch_travel_ = 0.0;

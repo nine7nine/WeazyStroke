@@ -64,6 +64,14 @@ GestureConfig GestureConfig::load(const std::string &path) {
             cfg.trail_fade_ms = static_cast<int>(s["trail_fade_ms"].as_number());
         if (s["touch_band"].is_number())
             cfg.touch_band = static_cast<int>(s["touch_band"].as_number());
+        if (s["touch_cue"].is_bool())
+            cfg.touch_cue = s["touch_cue"].as_bool();
+        if (s["touch_ring"].is_number())
+            cfg.touch_ring = static_cast<int>(s["touch_ring"].as_number());
+        if (s["touch_grow_ms"].is_number())
+            cfg.touch_grow_ms = static_cast<int>(s["touch_grow_ms"].as_number());
+        if (s["touch_out_ms"].is_number())
+            cfg.touch_out_ms = static_cast<int>(s["touch_out_ms"].as_number());
     }
 
     const json::Value &gestures = root["gestures"];
@@ -133,6 +141,10 @@ void GestureConfig::save(const std::string &path) const {
     settings["trail_effect"] = json::Value(trail_effect);
     settings["trail_fade_ms"] = json::Value(trail_fade_ms);
     settings["touch_band"] = json::Value(touch_band);
+    settings["touch_cue"] = json::Value(touch_cue);
+    settings["touch_ring"] = json::Value(touch_ring);
+    settings["touch_grow_ms"] = json::Value(touch_grow_ms);
+    settings["touch_out_ms"] = json::Value(touch_out_ms);
     root["settings"] = json::Value(std::move(settings));
 
     json::Array out_gestures;

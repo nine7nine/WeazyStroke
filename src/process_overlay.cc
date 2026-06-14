@@ -69,6 +69,16 @@ void ProcessOverlay::end() {
         std::fputs("E\n", pipe_);
 }
 
+void ProcessOverlay::anchor_show(double x, double y) {
+    if (pipe_)
+        std::fprintf(pipe_, "A %.1f %.1f\n", x, y);
+}
+
+void ProcessOverlay::anchor_hide() {
+    if (pipe_)
+        std::fputs("a\n", pipe_);
+}
+
 void ProcessOverlay::set_width(int px) {
     if (pipe_)
         std::fprintf(pipe_, "W %d\n", px);
@@ -82,6 +92,16 @@ void ProcessOverlay::set_effect(int effect) {
 void ProcessOverlay::set_fade_ms(int ms) {
     if (pipe_)
         std::fprintf(pipe_, "D %d\n", ms);
+}
+
+void ProcessOverlay::set_anchor_radius(int px) {
+    if (pipe_)
+        std::fprintf(pipe_, "R %d\n", px);
+}
+
+void ProcessOverlay::set_anchor_timing(int grow_ms, int out_ms) {
+    if (pipe_)
+        std::fprintf(pipe_, "G %d %d\n", grow_ms, out_ms);
 }
 
 void ProcessOverlay::show_osd(const std::string &name) {

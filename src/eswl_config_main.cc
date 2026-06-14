@@ -978,6 +978,18 @@ void on_edge_changed(GObject *dd, GParamSpec *, gpointer d) {
 void on_band_changed(GtkSpinButton *sp, gpointer d) {
     static_cast<State *>(d)->cfg.touch_band = static_cast<int>(gtk_spin_button_get_value(sp));
 }
+void on_cue_toggled(GtkCheckButton *cb, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_cue = gtk_check_button_get_active(cb);
+}
+void on_ring_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_ring = static_cast<int>(gtk_spin_button_get_value(sp));
+}
+void on_grow_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_grow_ms = static_cast<int>(gtk_spin_button_get_value(sp));
+}
+void on_out_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_out_ms = static_cast<int>(gtk_spin_button_get_value(sp));
+}
 void on_mod_toggled(GtkCheckButton *cb, gpointer d) {
     State *s = static_cast<State *>(d);
     unsigned bit = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(cb), "bit"));
@@ -1148,6 +1160,38 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_set_halign(band, GTK_ALIGN_START);
     g_signal_connect(band, "value-changed", G_CALLBACK(on_band_changed), s);
     gtk_grid_attach(GTK_GRID(tg), band, 1, 1, 1, 1);
+
+    GtkWidget *rl = gtk_label_new("Ring size (px)");
+    gtk_label_set_xalign(GTK_LABEL(rl), 0.0);
+    gtk_grid_attach(GTK_GRID(tg), rl, 0, 2, 1, 1);
+    GtkWidget *ring = gtk_spin_button_new_with_range(20, 300, 5);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(ring), s->cfg.touch_ring);
+    gtk_widget_set_halign(ring, GTK_ALIGN_START);
+    g_signal_connect(ring, "value-changed", G_CALLBACK(on_ring_changed), s);
+    gtk_grid_attach(GTK_GRID(tg), ring, 1, 2, 1, 1);
+
+    GtkWidget *gl = gtk_label_new("Grow time (ms)");
+    gtk_label_set_xalign(GTK_LABEL(gl), 0.0);
+    gtk_grid_attach(GTK_GRID(tg), gl, 0, 3, 1, 1);
+    GtkWidget *grow = gtk_spin_button_new_with_range(50, 2000, 10);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(grow), s->cfg.touch_grow_ms);
+    gtk_widget_set_halign(grow, GTK_ALIGN_START);
+    g_signal_connect(grow, "value-changed", G_CALLBACK(on_grow_changed), s);
+    gtk_grid_attach(GTK_GRID(tg), grow, 1, 3, 1, 1);
+
+    GtkWidget *ol = gtk_label_new("Fade-out time (ms)");
+    gtk_label_set_xalign(GTK_LABEL(ol), 0.0);
+    gtk_grid_attach(GTK_GRID(tg), ol, 0, 4, 1, 1);
+    GtkWidget *out = gtk_spin_button_new_with_range(50, 2000, 10);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(out), s->cfg.touch_out_ms);
+    gtk_widget_set_halign(out, GTK_ALIGN_START);
+    g_signal_connect(out, "value-changed", G_CALLBACK(on_out_changed), s);
+    gtk_grid_attach(GTK_GRID(tg), out, 1, 4, 1, 1);
+
+    GtkWidget *cue = gtk_check_button_new_with_label("Show the edge-hold ring while armed");
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(cue), s->cfg.touch_cue);
+    g_signal_connect(cue, "toggled", G_CALLBACK(on_cue_toggled), s);
+    gtk_grid_attach(GTK_GRID(tg), cue, 0, 5, 2, 1);
     gtk_box_append(GTK_BOX(page), tg);
 
     GtkWidget *tnote = gtk_label_new(

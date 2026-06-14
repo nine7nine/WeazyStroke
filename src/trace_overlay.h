@@ -14,6 +14,12 @@ public:
     virtual void begin() = 0;                 // start a fresh stroke (clear old trail)
     virtual void add(double x, double y) = 0; // append a point (screen-pixel space)
     virtual void end() = 0;                   // gesture finished; clear the trail
+
+    // Optional "armed" cue shown while the touch anchor finger is held: an
+    // expanding ring at (x, y) in screen-pixel space. anchor_show may be called
+    // repeatedly to move it; anchor_hide removes it. Default: no cue.
+    virtual void anchor_show(double x, double y) { (void)x, (void)y; }
+    virtual void anchor_hide() {}
 };
 
 } // namespace es

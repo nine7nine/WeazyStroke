@@ -20,7 +20,10 @@ enum class TouchEdge { None, Left, Right, Top, Bottom };
 class TouchGate {
 public:
     enum class Down { Ignore, Anchor, Draw };
-    enum class Up { Ignore, Cancel, Finalize };
+    // Finalize: the draw finger lifted (anchor still held, armed for another).
+    // Cancel: the anchor lifted mid-stroke. EndSession: the anchor lifted with
+    // no stroke in progress. Both anchor lifts end the session (hide any cue).
+    enum class Up { Ignore, Cancel, Finalize, EndSession };
 
     void configure(TouchEdge edge, int screen_w, int screen_h, int band_px) {
         edge_ = edge;
@@ -61,13 +64,15 @@ public:
         if (anchored_ && slot == anchor_slot_) {
             bool was_drawing = drawing_;
             reset();
-            return was_drawing ? Up::Cancel : Up::Ignore;
+            return was_drawing ? Up::Cancel : Up::EndSession;
         }
         return Up::Ignore;
     }
 
     // True only for the finger whose motion should be recorded as the stroke.
     bool is_draw(int slot) const { return drawing_ && slot == draw_slot_; }
+    // True for the held anchor finger (so its motion can move the visual cue).
+    bool is_anchor(int slot) const { return anchored_ && slot == anchor_slot_; }
 
     void reset() {
         anchored_ = false;

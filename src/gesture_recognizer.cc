@@ -102,19 +102,32 @@ void GestureRecognizer::run_stroke(const std::vector<Sample> &samples, double ma
 // draw finger's path and reuse the same scoring/dispatch as the button path.
 
 void GestureRecognizer::on_touch_down(int slot, Sample at) {
-    if (touch_.on_down(slot, at.x, at.y) != TouchGate::Down::Draw)
-        return;
-    touch_samples_.clear();
-    touch_samples_.push_back(at);
-    touch_origin_ = {at.x, at.y};
-    touch_travel_ = 0.0;
-    if (overlay_) {
-        overlay_->begin();
-        overlay_->add(at.x, at.y);
+    switch (touch_.on_down(slot, at.x, at.y)) {
+    case TouchGate::Down::Anchor:
+        if (overlay_ && touch_cue_)
+            overlay_->anchor_show(at.x, at.y); // "armed" ring at the held point
+        break;
+    case TouchGate::Down::Draw:
+        touch_samples_.clear();
+        touch_samples_.push_back(at);
+        touch_origin_ = {at.x, at.y};
+        touch_travel_ = 0.0;
+        if (overlay_) {
+            overlay_->begin();
+            overlay_->add(at.x, at.y);
+        }
+        break;
+    case TouchGate::Down::Ignore:
+        break;
     }
 }
 
 void GestureRecognizer::on_touch_motion(int slot, Sample at) {
+    if (touch_.is_anchor(slot)) {
+        if (overlay_ && touch_cue_)
+            overlay_->anchor_show(at.x, at.y); // ring follows the held finger
+        return;
+    }
     if (!touch_.is_draw(slot))
         return;
     touch_samples_.push_back(at);
@@ -127,16 +140,22 @@ void GestureRecognizer::on_touch_motion(int slot, Sample at) {
 
 void GestureRecognizer::on_touch_up(int slot, Sample) {
     switch (touch_.on_up(slot)) {
-    case TouchGate::Up::Finalize:
+    case TouchGate::Up::Finalize: // draw finger up; anchor still held -> keep cue
         if (overlay_)
             overlay_->end();
         run_stroke(touch_samples_, touch_travel_);
         touch_samples_.clear();
         break;
-    case TouchGate::Up::Cancel:
-        if (overlay_)
+    case TouchGate::Up::Cancel: // anchor lifted mid-stroke -> drop trail + cue
+        if (overlay_) {
             overlay_->end();
+            overlay_->anchor_hide();
+        }
         touch_samples_.clear();
+        break;
+    case TouchGate::Up::EndSession: // anchor lifted, no stroke -> just drop cue
+        if (overlay_)
+            overlay_->anchor_hide();
         break;
     case TouchGate::Up::Ignore:
         break;

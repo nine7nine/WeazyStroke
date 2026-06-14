@@ -45,7 +45,12 @@ struct GestureConfig {
     // draws the stroke. touch_band is stored under "settings". Defaults to the
     // right edge (left/top/bottom are commonly taken by compositor edge swipes).
     std::string touch_edge = "right";
-    int touch_band = 30; // px from the edge that counts as the anchor zone
+    int touch_band = 30;     // px from the edge that counts as the anchor zone
+    bool touch_cue = true;     // show the edge-hold "armed" ring overlay
+    int touch_ring = 90;       // radius (px) of that ring
+    int touch_grow_ms = 450;   // ring grow-out duration (ms)
+    int touch_out_ms = 220;    // ring shrink+fade-out duration on release (ms)
+                               // (touch_band/cue/ring/grow_ms/out_ms live in settings)
     // Tunable settings (easystroke's Preferences). Recognition + feedback knobs
     // the daemon reads; the GUI edits them. Stored under "settings" in the JSON.
     double match_threshold = 0.6; // recognition accuracy floor (0..1)

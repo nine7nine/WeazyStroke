@@ -28,6 +28,8 @@ public:
     void begin() override;
     void add(double x, double y) override;
     void end() override;
+    void anchor_show(double x, double y) override;
+    void anchor_hide() override;
 
     // Sets the trail line width (px) on the renderer.
     void set_width(int px);
@@ -37,6 +39,12 @@ public:
 
     // Sets the completion fade-out duration (ms; 0 = instant).
     void set_fade_ms(int ms);
+
+    // Sets the touch anchor-ring ("armed" cue) radius in px.
+    void set_anchor_radius(int px);
+
+    // Sets the anchor-ring animation timing: grow-out and shrink/fade-out (ms).
+    void set_anchor_timing(int grow_ms, int out_ms);
 
     // Flashes the matched gesture name on screen (OSD).
     void show_osd(const std::string &name);
