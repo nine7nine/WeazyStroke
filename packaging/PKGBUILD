@@ -8,14 +8,14 @@ pkgver=r1.0000000
 pkgrel=1
 pkgdesc="Mouse and stylus gesture recognition for Wayland (easystroke, reimagined)"
 arch=('x86_64')
-url="https://github.com/nine7nine/weazystroke"
+url="https://github.com/nine7nine/WeazyStroke"
 license=('ISC')
 depends=('libinput' 'libevdev' 'libxkbcommon' 'gtk4' 'gtk4-layer-shell' 'libadwaita'
          'glib2' 'systemd-libs')
 makedepends=('cmake' 'ninja' 'git')
 provides=('weazystroke')
 conflicts=('weazystroke')
-source=("$_pkgname::git+https://github.com/nine7nine/weazystroke.git")
+source=("$_pkgname::git+https://github.com/nine7nine/WeazyStroke.git")
 sha256sums=('SKIP')
 
 pkgver() {
