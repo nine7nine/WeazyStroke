@@ -32,7 +32,7 @@ struct Overlay {
     double screen_w = 1920.0;
     double screen_h = 1080.0;
     double width = 4.0;     // trail line width (px), set via the "W" command
-    int effect = 0;         // 0 plain, 1 glow, 2 sparkle (set via the "F" command)
+    int effect = 0;         // 0 plain, 1 pixel, 2 sparkle (set via the "F" command)
     int fade_ms = 380;      // completion fade-out duration (set via the "D" command)
     std::string inbuf;      // accumulates partial stdin lines
     std::string osd;        // matched-gesture name to flash (empty = none)
@@ -68,49 +68,70 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
             if (i0 >= n)
                 i0 = n - 1;
         }
-        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
-        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-
-        // Per-segment blue→green direction gradient (start blue, end green), like
-        // easystroke's Stroke::draw. Glow draws extra wide faint underlays first.
-        const int passes = o->effect == 1 ? 3 : 1;
-        const double wmul[3] = {4.6, 2.4, 1.0};
-        const double walpha[3] = {0.10, 0.20, 1.0};
-        for (int p = passes - 1; p >= 0; --p) {
-            int idx = o->effect == 1 ? p : 2;
-            cairo_set_line_width(cr, o->width * wmul[idx]);
+        if (o->effect == 1) {
+            // Pixel: chunky 8-bit blocks on a coarse grid — hard edges, a 5-step
+            // quantized blue→green palette, one fill per grid cell (cheap).
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+            double cell = o->width * 1.7;
+            if (cell < 6.0)
+                cell = 6.0;
+            bool first = true;
+            long lcx = 0, lcy = 0;
+            for (std::size_t i = i0; i < n; ++i) {
+                long cx = static_cast<long>(std::floor(o->xs[i] * sx / cell));
+                long cy = static_cast<long>(std::floor(o->ys[i] * sy / cell));
+                if (!first && cx == lcx && cy == lcy)
+                    continue;
+                first = false;
+                lcx = cx;
+                lcy = cy;
+                double t = n > 1 ? static_cast<double>(i) / (n - 1) : 0.0;
+                double qt = std::floor(t * 4.0 + 0.5) / 4.0;
+                cairo_set_source_rgba(cr, 0.0, qt, 1.0 - qt, 1.0);
+                cairo_rectangle(cr, cx * cell, cy * cell, cell - 1.0, cell - 1.0);
+                cairo_fill(cr);
+            }
+        } else {
+            // Plain: smooth blue→green gradient line (start blue, end green),
+            // matching easystroke's Stroke::draw.
+            cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+            cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+            cairo_set_line_width(cr, o->width);
             for (std::size_t i = i0; i + 1 < n; ++i) {
                 double t = static_cast<double>(i) / (n - 1);
-                cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx]);
+                cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, 1.0);
                 cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
                 cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
                 cairo_stroke(cr);
             }
-        }
-
-        if (o->effect == 2) { // sparkle on the visible head + the retracting front
-            for (std::size_t i = i0; i < n; ++i) {
-                double age = n > 1 ? static_cast<double>(n - 1 - i) / (n - 1) : 0.0;
-                double a;
-                if (i0 > 0 && i < i0 + 3)
-                    a = 1.0; // bright sparkles where the line is being drawn back
-                else if (age > 0.45)
-                    continue;
-                else
-                    a = 1.0 - age / 0.45;
-                unsigned h = static_cast<unsigned>(i) * 2654435761u + 12345u;
-                double jx = ((h & 0xff) / 255.0 - 0.5) * 16.0;
-                double jy = (((h >> 8) & 0xff) / 255.0 - 0.5) * 16.0;
-                // Particles shrink to nothing as the transition completes
-                // (quadratic, so they die out quickly).
-                double shrink = o->fading ? (1.0 - o->fade) * (1.0 - o->fade) : 1.0;
-                double sz = (1.0 + ((h >> 16) & 0x7) / 7.0 * 2.4) * shrink;
-                double t = n > 1 ? static_cast<double>(i) / (n - 1) : 0.0;
-                cairo_set_source_rgba(cr, 0.45 + 0.5 * t, 1.0, 0.55 + 0.4 * (1.0 - t), a * 0.85);
-                cairo_arc(cr, o->xs[i] * sx + jx, o->ys[i] * sy + jy, sz, 0, 2 * M_PI);
-                cairo_fill(cr);
+            if (o->effect == 2) {
+                // Sparkle: sparse hard square pixels (white/green) with discrete
+                // sizes that step down to nothing as the transition completes.
+                cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+                for (std::size_t i = i0; i < n; i += 2) {
+                    double age = n > 1 ? static_cast<double>(n - 1 - i) / (n - 1) : 0.0;
+                    bool front = i0 > 0 && i < i0 + 4;
+                    if (!front && age > 0.4)
+                        continue;
+                    unsigned h = static_cast<unsigned>(i) * 2654435761u + 12345u;
+                    if ((h & 1u) == 0u)
+                        continue; // ~half off -> sparse
+                    int base = 3 + static_cast<int>((h >> 8) & 1u); // 3 or 4 px
+                    int sz = o->fading ? base - static_cast<int>(o->fade * (base + 1)) : base;
+                    if (sz < 1)
+                        continue;
+                    double jx = static_cast<double>(static_cast<int>((h >> 1) & 7u) - 3) * 2.0;
+                    double jy = static_cast<double>(static_cast<int>((h >> 4) & 7u) - 3) * 2.0;
+                    if ((h >> 10) & 1u)
+                        cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0); // white
+                    else
+                        cairo_set_source_rgba(cr, 0.3, 1.0, 0.55, 1.0); // green
+                    cairo_rectangle(cr, o->xs[i] * sx + jx, o->ys[i] * sy + jy, sz, sz);
+                    cairo_fill(cr);
+                }
             }
         }
+        cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT); // restore for OSD text
     }
 
     if (!o->osd.empty()) {
@@ -218,7 +239,7 @@ void process_line(Overlay *o, const std::string &line) {
             o->width = w;
         return; // no redraw needed
     }
-    case 'F': { // set trail effect: 0 plain, 1 glow, 2 sparkle
+    case 'F': { // set trail effect: 0 plain, 1 pixel, 2 sparkle
         int e = 0;
         if (std::sscanf(line.c_str() + 1, "%d", &e) == 1)
             o->effect = e;
