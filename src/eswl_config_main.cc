@@ -1354,8 +1354,9 @@ GtkWidget *build_history_page(State *s) {
     return page;
 }
 
-void on_activate(GtkApplication *app, gpointer data) {
-    State *s = static_cast<State *>(data);
+void ensure_window(State *s, GtkApplication *app) {
+    if (s->window)
+        return;
     load_css();
     apply_appearance(s);
 
@@ -1417,7 +1418,34 @@ void on_activate(GtkApplication *app, gpointer data) {
 
     rebuild_list(s);
     select_index(s, 0);
+}
+
+// Single-instance entry points. GApplication routes every launch to the one
+// primary instance, so we keep a single window and present/toggle it rather
+// than building a new one each time (which stacked a window on every tray
+// click). The tray icon passes --toggle (show <-> hide); a plain launch
+// (Preferences menu, app launcher) always presents.
+void on_activate(GtkApplication *app, gpointer data) {
+    State *s = static_cast<State *>(data);
+    ensure_window(s, app);
     gtk_window_present(GTK_WINDOW(s->window));
+}
+
+int on_command_line(GApplication *app, GApplicationCommandLine *cl, gpointer data) {
+    State *s = static_cast<State *>(data);
+    int argc = 0;
+    char **argv = g_application_command_line_get_arguments(cl, &argc);
+    bool toggle = false;
+    for (int i = 1; i < argc; ++i)
+        if (g_strcmp0(argv[i], "--toggle") == 0)
+            toggle = true;
+    g_strfreev(argv);
+    ensure_window(s, GTK_APPLICATION(app));
+    if (toggle && gtk_widget_get_visible(s->window))
+        gtk_widget_set_visible(s->window, FALSE);
+    else
+        gtk_window_present(GTK_WINDOW(s->window));
+    return 0;
 }
 
 } // namespace
@@ -1443,9 +1471,10 @@ int main(int argc, char **argv) {
     load_appearance(&state);
 
     GtkApplication *app =
-        gtk_application_new("org.weazystroke.Config", G_APPLICATION_DEFAULT_FLAGS);
+        gtk_application_new("org.weazystroke.Config", G_APPLICATION_HANDLES_COMMAND_LINE);
     g_signal_connect(app, "activate", G_CALLBACK(on_activate), &state);
-    int status = g_application_run(G_APPLICATION(app), 1, argv);
+    g_signal_connect(app, "command-line", G_CALLBACK(on_command_line), &state);
+    int status = g_application_run(G_APPLICATION(app), argc, argv);
     g_object_unref(app);
     return status;
 }

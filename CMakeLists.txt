@@ -23,6 +23,9 @@ pkg_check_modules(XKB REQUIRED IMPORTED_TARGET xkbcommon)
 pkg_check_modules(OVERLAY REQUIRED IMPORTED_TARGET gtk4 gtk4-layer-shell-0)
 # GTK4 alone for the config GUI (eswl-config).
 pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
+# GIO/GDBus for the system-tray helper (eswl-tray) -- StatusNotifierItem over
+# DBus. No GTK; just glib/gio, so the tray stays light.
+pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 gio-unix-2.0)
 
 # Core engine: recognition + input backends. Deliberately self-contained --
 # only libc/libstdc++ and libinput/libudev. No Boost, no GUI toolkit.
@@ -37,6 +40,7 @@ add_library(eswl_core STATIC
     src/gesture_config.cc
     src/process.cc
     src/process_overlay.cc
+    src/process_tray.cc
     src/keymap.cc
     src/evdev_source.cc
 )
@@ -58,6 +62,10 @@ add_executable(eswl-config src/eswl_config_main.cc src/gesture_config.cc src/jso
 target_include_directories(eswl-config PRIVATE src)
 target_link_libraries(eswl-config PRIVATE PkgConfig::GTK4)
 
+# System-tray helper. GIO/GDBus only (StatusNotifierItem); no GTK.
+add_executable(eswl-tray src/eswl_tray_main.cc)
+target_link_libraries(eswl-tray PRIVATE PkgConfig::GIO)
+
 enable_testing()
 set(ESWL_TESTS recognition json config keymap trigger_gate multitemplate)
 set(ESWL_APP_TARGETS eswl-daemon)
@@ -73,8 +81,8 @@ set(ESWL_WARNINGS -Wall -Wextra -Wpedantic)
 foreach(tgt ${ESWL_APP_TARGETS})
     target_compile_options(${tgt} PRIVATE ${ESWL_WARNINGS})
 endforeach()
-# GTK targets get -Wall -Wextra (no -Wpedantic; GTK macros are noisy under it).
-foreach(tgt eswl-overlay eswl-config)
+# GTK/GIO targets get -Wall -Wextra (no -Wpedantic; their macros are noisy).
+foreach(tgt eswl-overlay eswl-config eswl-tray)
     target_compile_options(${tgt} PRIVATE -Wall -Wextra)
 endforeach()
 # The C++ engine sources get the warnings; stroke.c is recycled verbatim and
@@ -90,13 +98,13 @@ if(ENABLE_ASAN)
     # surface in dev instead of only in optimized release builds. Run the GTK apps
     # with ASAN_OPTIONS=detect_leaks=0 to silence GTK's benign one-shot allocations.
     set(ESWL_SAN -fsanitize=address,undefined -fno-omit-frame-pointer -g)
-    foreach(tgt eswl_core ${ESWL_APP_TARGETS} eswl-overlay eswl-config)
+    foreach(tgt eswl_core ${ESWL_APP_TARGETS} eswl-overlay eswl-config eswl-tray)
         target_compile_options(${tgt} PRIVATE ${ESWL_SAN})
         target_link_options(${tgt} PRIVATE ${ESWL_SAN})
     endforeach()
     message(STATUS "AddressSanitizer + UBSan: ENABLED (incl. GUI/overlay)")
 endif()
 
-install(TARGETS eswl-daemon eswl-overlay eswl-config DESTINATION bin/)
+install(TARGETS eswl-daemon eswl-overlay eswl-config eswl-tray DESTINATION bin/)
 install(FILES data/weazystroke.svg DESTINATION share/icons/hicolor/scalable/apps/)
 install(FILES data/weazystroke.desktop DESTINATION share/applications/)

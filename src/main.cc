@@ -11,6 +11,7 @@
 #include "libinput_source.h"
 #include "process.h"
 #include "process_overlay.h"
+#include "process_tray.h"
 #include "uinput_injector.h"
 
 #include <fcntl.h>
@@ -300,6 +301,7 @@ template <typename Pred> void run_loop(InputSource &source, Pred keep_going) {
     std::printf("  --screen WxH     screen size for pointer tracking (default 1920x1080)\n");
     std::printf("  --threshold T    match score floor 0..1 (default 0.6; lower = more lenient)\n");
     std::printf("  --overlay        draw the live stroke trail (gtk4 layer-shell overlay)\n");
+    std::printf("  --tray           show a system-tray icon (enable/disable, prefs, quit)\n");
     std::printf("  --grab           grab mice (EVIOCGRAB) to suppress the trigger button;\n");
     std::printf("                   without it, capture is monitor-only and the button also clicks\n");
     std::exit(code);
@@ -316,6 +318,7 @@ int main(int argc, char **argv) {
     double cli_threshold = -1.0; // <0 => take match_threshold from the config
     bool grab = false;
     bool overlay = false;
+    bool tray = false;
     std::string config_path = GestureConfig::default_path();
     std::string record_name;
 
@@ -337,6 +340,8 @@ int main(int argc, char **argv) {
             grab = true;
         } else if (a == "--overlay") {
             overlay = true;
+        } else if (a == "--tray") {
+            tray = true;
         } else {
             std::fprintf(stderr, "unknown argument: %s\n", a.c_str());
             usage(argv[0], 2);
@@ -458,6 +463,16 @@ int main(int argc, char **argv) {
             op->show_osd(r.name);
     });
 
+    std::unique_ptr<ProcessTray> tray_proc;
+    if (tray) {
+        try {
+            tray_proc = std::make_unique<ProcessTray>(self_dir() + "/eswl-tray");
+            tray_proc->set_enabled(!g_disabled);
+        } catch (const std::exception &e) {
+            std::fprintf(stderr, "warning: tray unavailable: %s\n", e.what());
+        }
+    }
+
     std::unique_ptr<InputSource> source;
     try {
         if (grab) {
@@ -481,8 +496,15 @@ int main(int argc, char **argv) {
                 cfg.gestures.size(), trigger, screen_w, screen_h);
     if (cfg.gestures.empty())
         std::printf("no gestures yet — record one with: %s --record NAME\n", argv[0]);
+    bool last_disabled = g_disabled.load();
     run_loop(*source, [&] {
         recognizer.tick(monotonic_ms()); // finalize debounced (pen-tip) releases
+        // Mirror enable/disable changes (gesture, GUI, or tray-raised SIGUSR1)
+        // to the tray so its checkmark/tooltip stay in sync.
+        if (bool d = g_disabled.load(); tray_proc && d != last_disabled) {
+            last_disabled = d;
+            tray_proc->set_enabled(!d);
+        }
         if (g_reload.exchange(false)) {
             try {
                 cfg = GestureConfig::load(config_path);
