@@ -90,6 +90,17 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 sudo usermod -aG input "$USER"        # then re-login
 ```
 
+## GNOME
+
+The engine, GUI, and actions work on GNOME, but **not the live stroke trail**:
+Mutter doesn't implement `wlr-layer-shell`, and a normal Wayland window can't be
+a click-through, always-on-top overlay. Drawing the trail there would require a
+GNOME Shell extension that renders on the shell stage, fed by the daemon over
+DBus. The overlay already sits behind a swappable process + line-protocol
+interface (`TraceOverlay`), so such a DBus backend would slot in with no engine
+changes. Future / community contribution — not planned (per-app detection on
+GNOME would need the same extension).
+
 ## License
 
 ISC, inheriting easystroke's license. Recognition core from
