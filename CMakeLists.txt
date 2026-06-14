@@ -67,7 +67,7 @@ add_executable(eswl-tray src/eswl_tray_main.cc)
 target_link_libraries(eswl-tray PRIVATE PkgConfig::GIO)
 
 enable_testing()
-set(ESWL_TESTS recognition json config keymap trigger_gate multitemplate)
+set(ESWL_TESTS recognition json config keymap trigger_gate multitemplate gate)
 set(ESWL_APP_TARGETS eswl-daemon)
 foreach(t ${ESWL_TESTS})
     add_executable(eswl_${t}_test tests/${t}_test.cc)

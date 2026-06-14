@@ -37,8 +37,14 @@ public:
     void add_binding(GestureBinding binding);
     void clear_bindings() { bindings_.clear(); }
     void set_threshold(double t) { threshold_ = t; }
+    // Change the trigger button live (e.g. on config reload).
+    void set_trigger(Button b) { trigger_ = b; }
     // Modifiers that must be held when the trigger is pressed (mouse mode).
     void set_required_modifiers(unsigned m) { required_mods_ = m; }
+    // A second button that must be held for the trigger to start a gesture, and
+    // whose release ends one in progress (0 = none). Used for the pen "tip +
+    // side button" chord so the side button alone stays free for other actions.
+    void set_gate_button(Button b) { gate_button_ = b; }
 
     // Debounce the trigger release by `ms` (0 = off). For the pen tip, which
     // chatters under light pressure: a release that is followed by a press
@@ -72,6 +78,8 @@ private:
     double threshold_;
     unsigned required_mods_ = 0; // modifiers required at trigger-press (mouse mode)
     unsigned cur_mods_ = 0;      // current modifier state from the source
+    Button gate_button_ = 0;     // 2nd button that must be held (0 = none)
+    bool gate_held_ = false;     // current gate-button state
     unsigned debounce_ms_ = 0;   // trigger-release debounce window (0 = off)
     bool pending_end_ = false;   // a debounced release is waiting to finalize
     uint32_t end_deadline_ = 0;  // when the pending release finalizes (ms)

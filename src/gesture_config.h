@@ -35,6 +35,10 @@ struct GestureConfig {
     // button, optionally with modifiers), or "multitouch" (future).
     std::string mode = "stylus";
     unsigned trigger_modifiers = 0; // required modifiers for "mouse" mode (Mod bits)
+    // Optional second button that must be held for the trigger to start a
+    // gesture (0 = none). Used for the pen "tip + side button" chord, which
+    // frees the side button alone for other actions (e.g. a right-click).
+    unsigned gate_button = 0;
     // Tunable settings (easystroke's Preferences). Recognition + feedback knobs
     // the daemon reads; the GUI edits them. Stored under "settings" in the JSON.
     double match_threshold = 0.6; // recognition accuracy floor (0..1)

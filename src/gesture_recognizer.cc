@@ -12,6 +12,15 @@ void GestureRecognizer::add_binding(GestureBinding binding) {
 }
 
 void GestureRecognizer::on_button(Button button, bool pressed, Sample at) {
+    // Gate button (e.g. the pen side button in "tip + side button" mode): track
+    // its state. Releasing it ends an in-progress chord gesture immediately.
+    if (gate_button_ != 0 && button == gate_button_) {
+        gate_held_ = pressed;
+        if (!pressed && recording_)
+            finalize();
+        return;
+    }
+
     if (button != trigger_)
         return;
 
@@ -24,6 +33,9 @@ void GestureRecognizer::on_button(Button button, bool pressed, Sample at) {
         }
         // Mouse mode: only start if the required modifiers are held.
         if ((cur_mods_ & required_mods_) != required_mods_)
+            return;
+        // Chord mode: the gate button (e.g. pen side button) must already be held.
+        if (gate_button_ != 0 && !gate_held_)
             return;
         recording_ = true;
         pending_end_ = false;

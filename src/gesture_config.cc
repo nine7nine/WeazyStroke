@@ -41,6 +41,8 @@ GestureConfig GestureConfig::load(const std::string &path) {
         cfg.mode = root["mode"].as_string();
     if (root["trigger_modifiers"].is_number())
         cfg.trigger_modifiers = static_cast<unsigned>(root["trigger_modifiers"].as_number());
+    if (root["gate_button"].is_number())
+        cfg.gate_button = static_cast<unsigned>(root["gate_button"].as_number());
 
     const json::Value &s = root["settings"];
     if (s.is_object()) {
@@ -115,6 +117,7 @@ void GestureConfig::save(const std::string &path) const {
     root["trigger_button"] = json::Value(static_cast<int>(trigger_button));
     root["mode"] = json::Value(mode);
     root["trigger_modifiers"] = json::Value(static_cast<int>(trigger_modifiers));
+    root["gate_button"] = json::Value(static_cast<int>(gate_button));
 
     json::Object settings;
     settings["match_threshold"] = json::Value(match_threshold);

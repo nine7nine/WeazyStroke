@@ -34,10 +34,19 @@ namespace {
 const char *const kTypeNames[] = {"(none)", "command", "key",    "text",   "button",
                                   "scroll", "ignore",  "misc",   nullptr};
 
-const char *const kTriggerLabels[] = {"1 — left",       "2 — middle",  "3 — right",
-                                      "8 — back",        "9 — forward", "10 — pen tip",
-                                      "11 — pen button", nullptr};
-const int kTriggerButtons[] = {1, 2, 3, 8, 9, 10, 11};
+const char *const kTriggerLabels[] = {"1 — left",
+                                      "2 — middle",
+                                      "3 — right",
+                                      "8 — back",
+                                      "9 — forward",
+                                      "10 — pen tip",
+                                      "11 — pen button",
+                                      "pen tip + side button (hold)",
+                                      nullptr};
+const int kTriggerButtons[] = {1, 2, 3, 8, 9, 10, 11, 10};
+// Optional gate button per trigger entry (0 = none). The chord entry triggers
+// on the pen tip (10) while the side button (11) is held.
+const int kTriggerGates[] = {0, 0, 0, 0, 0, 0, 0, 11};
 
 constexpr int kThumbW = 64;
 constexpr int kThumbH = 40;
@@ -701,8 +710,10 @@ void on_delete(GtkButton *, gpointer data) {
 void on_save(GtkButton *, gpointer data) {
     State *s = static_cast<State *>(data);
     guint ti = gtk_drop_down_get_selected(GTK_DROP_DOWN(s->trigger_dropdown));
-    if (ti < G_N_ELEMENTS(kTriggerButtons))
+    if (ti < G_N_ELEMENTS(kTriggerButtons)) {
         s->cfg.trigger_button = static_cast<Button>(kTriggerButtons[ti]);
+        s->cfg.gate_button = static_cast<unsigned>(kTriggerGates[ti]);
+    }
     try {
         s->cfg.save(s->config_path);
         // Ask a running daemon to reload its config (harmless if none runs).
@@ -1071,7 +1082,8 @@ GtkWidget *build_prefs_page(State *s) {
     s->trigger_dropdown = gtk_drop_down_new_from_strings(kTriggerLabels);
     gtk_widget_set_halign(s->trigger_dropdown, GTK_ALIGN_START);
     for (guint i = 0; i < G_N_ELEMENTS(kTriggerButtons); ++i)
-        if (kTriggerButtons[i] == (int)s->cfg.trigger_button)
+        if (kTriggerButtons[i] == (int)s->cfg.trigger_button &&
+            kTriggerGates[i] == (int)s->cfg.gate_button)
             gtk_drop_down_set_selected(GTK_DROP_DOWN(s->trigger_dropdown), i);
     gtk_box_append(GTK_BOX(page), s->trigger_dropdown);
 
@@ -1097,8 +1109,9 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_box_append(GTK_BOX(page), modrow);
 
     GtkWidget *note = gtk_label_new(
-        "Stylus: 11 = side button, 10 = pen tip. Mouse: pick a button + optional modifiers.\n"
-        "Saving applies to the running daemon automatically.");
+        "Stylus: 11 = side button, 10 = pen tip. \"tip + side button\" needs both held to\n"
+        "draw a gesture, leaving the side button alone free for other uses (e.g. right-click).\n"
+        "Mouse: pick a button + optional modifiers. Saving applies to the running daemon.");
     gtk_label_set_xalign(GTK_LABEL(note), 0.0);
     gtk_widget_add_css_class(note, "dim");
     gtk_widget_set_margin_top(note, 8);
