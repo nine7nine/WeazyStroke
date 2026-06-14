@@ -32,6 +32,9 @@ public:
     // Sets the trail line width (px) on the renderer.
     void set_width(int px);
 
+    // Sets the trail effect: 0 plain, 1 glow, 2 sparkle.
+    void set_effect(int effect);
+
     // Flashes the matched gesture name on screen (OSD).
     void show_osd(const std::string &name);
 

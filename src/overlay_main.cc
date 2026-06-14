@@ -32,6 +32,7 @@ struct Overlay {
     double screen_w = 1920.0;
     double screen_h = 1080.0;
     double width = 4.0;     // trail line width (px), set via the "W" command
+    int effect = 0;         // 0 plain, 1 glow, 2 sparkle (set via the "F" command)
     std::string inbuf;      // accumulates partial stdin lines
     std::string osd;        // matched-gesture name to flash (empty = none)
     guint osd_timer = 0;    // timeout source clearing the OSD
@@ -49,18 +50,44 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
     if (o->xs.size() >= 2) {
         const double sx = width / o->screen_w;
         const double sy = height / o->screen_h;
-        cairo_set_line_width(cr, o->width);
+        const std::size_t n = o->xs.size();
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-        // Per-segment blue→green direction gradient, matching the record pad and
-        // easystroke's Stroke::draw (start blue, end green).
-        std::size_t n = o->xs.size();
-        for (std::size_t i = 0; i + 1 < n; ++i) {
-            double t = static_cast<double>(i) / (n - 1);
-            cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, 1.0);
-            cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
-            cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
-            cairo_stroke(cr);
+
+        // The trail is a per-segment blue→green direction gradient (start blue,
+        // end green), matching easystroke's Stroke::draw. Glow draws extra wide,
+        // faint underlays first for a bloom.
+        const int passes = o->effect == 1 ? 3 : 1;
+        const double wmul[3] = {4.6, 2.4, 1.0};
+        const double walpha[3] = {0.10, 0.20, 1.0};
+        for (int p = passes - 1; p >= 0; --p) {
+            // p indexes from the core (0) outward; draw widest/faintest first.
+            int idx = o->effect == 1 ? p : 2;
+            cairo_set_line_width(cr, o->width * wmul[idx]);
+            for (std::size_t i = 0; i + 1 < n; ++i) {
+                double t = static_cast<double>(i) / (n - 1);
+                cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx]);
+                cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
+                cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
+                cairo_stroke(cr);
+            }
+        }
+
+        if (o->effect == 2) { // sparkle: fading dots near the head, jittered
+            for (std::size_t i = 0; i < n; ++i) {
+                double age = n > 1 ? static_cast<double>(n - 1 - i) / (n - 1) : 0.0;
+                if (age > 0.45)
+                    continue;
+                double a = 1.0 - age / 0.45;
+                unsigned h = static_cast<unsigned>(i) * 2654435761u + 12345u;
+                double jx = ((h & 0xff) / 255.0 - 0.5) * 16.0;
+                double jy = (((h >> 8) & 0xff) / 255.0 - 0.5) * 16.0;
+                double sz = 1.0 + ((h >> 16) & 0x7) / 7.0 * 2.4;
+                double t = n > 1 ? static_cast<double>(i) / (n - 1) : 0.0;
+                cairo_set_source_rgba(cr, 0.45 + 0.5 * t, 1.0, 0.55 + 0.4 * (1.0 - t), a * 0.85);
+                cairo_arc(cr, o->xs[i] * sx + jx, o->ys[i] * sy + jy, sz, 0, 2 * M_PI);
+                cairo_fill(cr);
+            }
         }
     }
 
@@ -121,6 +148,12 @@ void process_line(Overlay *o, const std::string &line) {
         if (std::sscanf(line.c_str() + 1, "%lf", &w) == 1 && w > 0)
             o->width = w;
         return; // no redraw needed
+    }
+    case 'F': { // set trail effect: 0 plain, 1 glow, 2 sparkle
+        int e = 0;
+        if (std::sscanf(line.c_str() + 1, "%d", &e) == 1)
+            o->effect = e;
+        return;
     }
     case 'O': { // flash gesture name (OSD)
         o->osd = line.substr(1);

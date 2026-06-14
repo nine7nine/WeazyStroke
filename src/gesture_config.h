@@ -41,7 +41,8 @@ struct GestureConfig {
     int trace_width = 4;          // overlay trail width (px)
     double scroll_speed = 1.0;    // multiplier for scroll actions
     bool scroll_invert = false;   // invert scroll-action direction
-    bool show_osd = false;        // flash the matched gesture name on screen
+    bool show_osd = false;          // flash the matched gesture name on screen
+    std::string trail_effect = "plain"; // overlay bling: "plain" | "glow" | "sparkle"
     std::vector<GestureEntry> gestures;
 
     // Loads from `path`. Returns a default config if the file does not exist;

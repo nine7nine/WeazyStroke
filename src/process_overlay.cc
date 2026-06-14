@@ -74,6 +74,11 @@ void ProcessOverlay::set_width(int px) {
         std::fprintf(pipe_, "W %d\n", px);
 }
 
+void ProcessOverlay::set_effect(int effect) {
+    if (pipe_)
+        std::fprintf(pipe_, "F %d\n", effect);
+}
+
 void ProcessOverlay::show_osd(const std::string &name) {
     if (!pipe_)
         return;

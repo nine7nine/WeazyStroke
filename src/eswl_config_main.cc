@@ -982,6 +982,12 @@ void on_scroll_invert_toggled(GtkCheckButton *cb, gpointer d) {
 void on_osd_toggled(GtkCheckButton *cb, gpointer d) {
     static_cast<State *>(d)->cfg.show_osd = gtk_check_button_get_active(cb);
 }
+const char *const kEffectNames[] = {"Plain", "Glow", "Sparkle", nullptr};
+const char *const kEffectValues[] = {"plain", "glow", "sparkle"};
+void on_effect_changed(GObject *dd, GParamSpec *, gpointer d) {
+    static_cast<State *>(d)->cfg.trail_effect =
+        kEffectValues[gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))];
+}
 
 // --- Autostart: a systemd --user service running the daemon on login --------
 std::string home_dir() {
@@ -1141,6 +1147,17 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_check_button_set_active(GTK_CHECK_BUTTON(osd), s->cfg.show_osd);
     g_signal_connect(osd, "toggled", G_CALLBACK(on_osd_toggled), s);
     gtk_grid_attach(GTK_GRID(fg), osd, 0, 1, 2, 1);
+    GtkWidget *efl = gtk_label_new("Trail effect");
+    gtk_label_set_xalign(GTK_LABEL(efl), 0.0);
+    gtk_widget_set_size_request(efl, 160, -1);
+    gtk_grid_attach(GTK_GRID(fg), efl, 0, 2, 1, 1);
+    GtkWidget *eff = gtk_drop_down_new_from_strings(kEffectNames);
+    gtk_widget_set_halign(eff, GTK_ALIGN_START);
+    for (guint i = 0; i < G_N_ELEMENTS(kEffectValues); ++i)
+        if (s->cfg.trail_effect == kEffectValues[i])
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(eff), i);
+    g_signal_connect(eff, "notify::selected", G_CALLBACK(on_effect_changed), s);
+    gtk_grid_attach(GTK_GRID(fg), eff, 1, 2, 1, 1);
     gtk_box_append(GTK_BOX(page), fg);
 
     // --- Scroll ---------------------------------------------------------

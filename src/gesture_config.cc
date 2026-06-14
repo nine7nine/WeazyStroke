@@ -54,6 +54,8 @@ GestureConfig GestureConfig::load(const std::string &path) {
             cfg.scroll_invert = s["scroll_invert"].as_bool();
         if (s["show_osd"].is_bool())
             cfg.show_osd = s["show_osd"].as_bool();
+        if (s["trail_effect"].is_string())
+            cfg.trail_effect = s["trail_effect"].as_string();
     }
 
     const json::Value &gestures = root["gestures"];
@@ -118,6 +120,7 @@ void GestureConfig::save(const std::string &path) const {
     settings["scroll_speed"] = json::Value(scroll_speed);
     settings["scroll_invert"] = json::Value(scroll_invert);
     settings["show_osd"] = json::Value(show_osd);
+    settings["trail_effect"] = json::Value(trail_effect);
     root["settings"] = json::Value(std::move(settings));
 
     json::Array out_gestures;

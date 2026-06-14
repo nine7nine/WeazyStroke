@@ -109,6 +109,15 @@ bool parse_scroll(const std::string &arg, int &dx, int &dy) {
     return true;
 }
 
+// Trail effect name -> overlay effect id.
+int effect_id(const std::string &e) {
+    if (e == "glow")
+        return 1;
+    if (e == "sparkle")
+        return 2;
+    return 0;
+}
+
 // Directory portion of a path (with trailing slash), or "" if none.
 std::string config_dir(const std::string &path) {
     auto slash = path.find_last_of('/');
@@ -428,6 +437,7 @@ int main(int argc, char **argv) {
             overlay_proc =
                 std::make_unique<ProcessOverlay>(self_dir() + "/eswl-overlay", screen_w, screen_h);
             overlay_proc->set_width(cfg.trace_width);
+            overlay_proc->set_effect(effect_id(cfg.trail_effect));
             recognizer.set_overlay(overlay_proc.get());
         } catch (const std::exception &e) {
             std::fprintf(stderr, "warning: overlay unavailable: %s\n", e.what());
@@ -479,8 +489,10 @@ int main(int argc, char **argv) {
                 build_bindings(recognizer, cfg, inj, keymap);
                 recognizer.set_threshold(cli_threshold >= 0 ? cli_threshold : cfg.match_threshold);
                 recognizer.set_required_modifiers(cfg.mode == "mouse" ? cfg.trigger_modifiers : 0);
-                if (overlay_proc)
+                if (overlay_proc) {
                     overlay_proc->set_width(cfg.trace_width);
+                    overlay_proc->set_effect(effect_id(cfg.trail_effect));
+                }
                 std::printf("[reload] config reloaded: %zu gesture(s), threshold %.2f\n",
                             cfg.gestures.size(),
                             cli_threshold >= 0 ? cli_threshold : cfg.match_threshold);
