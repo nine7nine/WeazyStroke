@@ -1001,6 +1001,15 @@ void on_mod_toggled(GtkCheckButton *cb, gpointer d) {
 void on_trace_width_changed(GtkSpinButton *sp, gpointer d) {
     static_cast<State *>(d)->cfg.trace_width = static_cast<int>(gtk_spin_button_get_value(sp));
 }
+void on_pressure_toggled(GtkCheckButton *cb, gpointer d) {
+    static_cast<State *>(d)->cfg.pressure = gtk_check_button_get_active(cb);
+}
+void on_pmin_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.pressure_min = static_cast<int>(gtk_spin_button_get_value(sp));
+}
+void on_pmax_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.pressure_max = static_cast<int>(gtk_spin_button_get_value(sp));
+}
 void on_scroll_speed_changed(GtkSpinButton *sp, gpointer d) {
     static_cast<State *>(d)->cfg.scroll_speed = gtk_spin_button_get_value(sp);
 }
@@ -1249,6 +1258,26 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_check_button_set_active(GTK_CHECK_BUTTON(osd), s->cfg.show_osd);
     g_signal_connect(osd, "toggled", G_CALLBACK(on_osd_toggled), s);
     gtk_grid_attach(GTK_GRID(fg), osd, 0, 1, 2, 1);
+
+    GtkWidget *pcb =
+        gtk_check_button_new_with_label("Pressure-sensitive trail width (pen tip + side button)");
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(pcb), s->cfg.pressure);
+    g_signal_connect(pcb, "toggled", G_CALLBACK(on_pressure_toggled), s);
+    gtk_grid_attach(GTK_GRID(fg), pcb, 0, 2, 2, 1);
+
+    GtkWidget *pminl = gtk_label_new("Pressure width: min/max (px)");
+    gtk_label_set_xalign(GTK_LABEL(pminl), 0.0);
+    gtk_grid_attach(GTK_GRID(fg), pminl, 0, 3, 1, 1);
+    GtkWidget *prow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *pmin = gtk_spin_button_new_with_range(1, 40, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(pmin), s->cfg.pressure_min);
+    g_signal_connect(pmin, "value-changed", G_CALLBACK(on_pmin_changed), s);
+    GtkWidget *pmax = gtk_spin_button_new_with_range(1, 60, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(pmax), s->cfg.pressure_max);
+    g_signal_connect(pmax, "value-changed", G_CALLBACK(on_pmax_changed), s);
+    gtk_box_append(GTK_BOX(prow), pmin);
+    gtk_box_append(GTK_BOX(prow), pmax);
+    gtk_grid_attach(GTK_GRID(fg), prow, 1, 3, 1, 1);
     gtk_box_append(GTK_BOX(page), fg);
 
     // --- Scroll ---------------------------------------------------------

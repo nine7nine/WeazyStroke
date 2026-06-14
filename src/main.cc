@@ -469,6 +469,7 @@ int main(int argc, char **argv) {
             overlay_proc->set_fade_ms(cfg.trail_fade_ms);
             overlay_proc->set_anchor_radius(cfg.touch_ring);
             overlay_proc->set_anchor_timing(cfg.touch_grow_ms, cfg.touch_out_ms);
+            overlay_proc->set_pressure(cfg.pressure, cfg.pressure_min, cfg.pressure_max);
             recognizer.set_overlay(overlay_proc.get());
         } catch (const std::exception &e) {
             std::fprintf(stderr, "warning: overlay unavailable: %s\n", e.what());
@@ -557,6 +558,7 @@ int main(int argc, char **argv) {
                     overlay_proc->set_fade_ms(cfg.trail_fade_ms);
                     overlay_proc->set_anchor_radius(cfg.touch_ring);
                     overlay_proc->set_anchor_timing(cfg.touch_grow_ms, cfg.touch_out_ms);
+                    overlay_proc->set_pressure(cfg.pressure, cfg.pressure_min, cfg.pressure_max);
                 }
                 std::printf("[reload] config reloaded: %zu gesture(s), threshold %.2f\n",
                             cfg.gestures.size(),

@@ -26,6 +26,9 @@ struct Sample {
     double x = 0.0;
     double y = 0.0;
     uint32_t time_ms = 0;
+    // Pen pressure, 0..1. Negative means "no pressure data" (mouse / touch), so
+    // only stylus strokes drive pressure-sensitive trail width.
+    double pressure = -1.0;
 };
 
 } // namespace es

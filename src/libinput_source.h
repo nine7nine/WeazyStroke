@@ -62,6 +62,7 @@ private:
     Point pos_;
     std::vector<Button> pen_held_; // pen buttons/tip currently down (in proximity)
     std::vector<Point> touch_pos_; // last position per touch slot (indexed by slot)
+    double last_pressure_ = 0.0;   // most recent pen pressure (carried across events)
     unsigned mods_ = 0;            // current keyboard modifier mask (kMod* bits)
 };
 

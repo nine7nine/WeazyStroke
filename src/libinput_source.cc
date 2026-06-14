@@ -97,7 +97,13 @@ Sample LibinputSource::update_tablet_pos(libinput_event_tablet_tool *t) {
     if (libinput_event_tablet_tool_y_has_changed(t))
         pos_.y = libinput_event_tablet_tool_get_y_transformed(t, screen_h_);
     clamp_position();
-    return {pos_.x, pos_.y, libinput_event_tablet_tool_get_time(t)};
+    // Pen pressure (0..1) rides along on the sample so the overlay can vary the
+    // trail width; only the stylus reports it (mouse/touch leave it negative).
+    double pressure = libinput_event_tablet_tool_pressure_has_changed(t)
+                          ? libinput_event_tablet_tool_get_pressure(t)
+                          : last_pressure_;
+    last_pressure_ = pressure;
+    return {pos_.x, pos_.y, libinput_event_tablet_tool_get_time(t), pressure};
 }
 
 void LibinputSource::set_pen_held(Button b, bool pressed) {

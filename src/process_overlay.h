@@ -26,7 +26,7 @@ public:
     ProcessOverlay &operator=(const ProcessOverlay &) = delete;
 
     void begin() override;
-    void add(double x, double y) override;
+    void add(double x, double y, double pressure = -1.0) override;
     void end() override;
     void anchor_show(double x, double y) override;
     void anchor_hide() override;
@@ -45,6 +45,10 @@ public:
 
     // Sets the anchor-ring animation timing: grow-out and shrink/fade-out (ms).
     void set_anchor_timing(int grow_ms, int out_ms);
+
+    // Pressure-sensitive pen trail width: enable + the width range (px) the
+    // pen pressure (0..1) maps onto.
+    void set_pressure(bool enabled, int min_px, int max_px);
 
     // Flashes the matched gesture name on screen (OSD).
     void show_osd(const std::string &name);

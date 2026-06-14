@@ -59,9 +59,9 @@ void ProcessOverlay::begin() {
         std::fputs("B\n", pipe_);
 }
 
-void ProcessOverlay::add(double x, double y) {
+void ProcessOverlay::add(double x, double y, double pressure) {
     if (pipe_)
-        std::fprintf(pipe_, "P %.1f %.1f\n", x, y);
+        std::fprintf(pipe_, "P %.1f %.1f %.3f\n", x, y, pressure);
 }
 
 void ProcessOverlay::end() {
@@ -102,6 +102,11 @@ void ProcessOverlay::set_anchor_radius(int px) {
 void ProcessOverlay::set_anchor_timing(int grow_ms, int out_ms) {
     if (pipe_)
         std::fprintf(pipe_, "G %d %d\n", grow_ms, out_ms);
+}
+
+void ProcessOverlay::set_pressure(bool enabled, int min_px, int max_px) {
+    if (pipe_)
+        std::fprintf(pipe_, "M %d %d %d\n", enabled ? 1 : 0, min_px, max_px);
 }
 
 void ProcessOverlay::show_osd(const std::string &name) {

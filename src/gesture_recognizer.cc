@@ -45,7 +45,7 @@ void GestureRecognizer::on_button(Button button, bool pressed, Sample at) {
         max_travel_ = 0.0;
         if (overlay_) {
             overlay_->begin();
-            overlay_->add(at.x, at.y);
+            overlay_->add(at.x, at.y, at.pressure);
         }
         return;
     }
@@ -114,7 +114,7 @@ void GestureRecognizer::on_touch_down(int slot, Sample at) {
         touch_travel_ = 0.0;
         if (overlay_) {
             overlay_->begin();
-            overlay_->add(at.x, at.y);
+            overlay_->add(at.x, at.y, at.pressure);
         }
         break;
     case TouchGate::Down::Ignore:
@@ -132,7 +132,7 @@ void GestureRecognizer::on_touch_motion(int slot, Sample at) {
         return;
     touch_samples_.push_back(at);
     if (overlay_)
-        overlay_->add(at.x, at.y);
+        overlay_->add(at.x, at.y, at.pressure);
     double travel = std::hypot(at.x - touch_origin_.x, at.y - touch_origin_.y);
     if (travel > touch_travel_)
         touch_travel_ = travel;
@@ -167,7 +167,7 @@ void GestureRecognizer::on_motion(Sample at, double, double) {
         return;
     samples_.push_back(at);
     if (overlay_)
-        overlay_->add(at.x, at.y);
+        overlay_->add(at.x, at.y, at.pressure);
     double travel = std::hypot(at.x - origin_.x, at.y - origin_.y);
     if (travel > max_travel_)
         max_travel_ = travel;

@@ -54,7 +54,10 @@ struct GestureConfig {
     // Tunable settings (easystroke's Preferences). Recognition + feedback knobs
     // the daemon reads; the GUI edits them. Stored under "settings" in the JSON.
     double match_threshold = 0.6; // recognition accuracy floor (0..1)
-    int trace_width = 4;          // overlay trail width (px)
+    int trace_width = 4;          // overlay trail width (px); also the pressure-off width
+    bool pressure = true;         // pen pressure varies the trail width
+    int pressure_min = 2;         // trail width (px) at lightest pen pressure
+    int pressure_max = 14;        // trail width (px) at hardest pen pressure
     double scroll_speed = 1.0;    // multiplier for scroll actions
     bool scroll_invert = false;   // invert scroll-action direction
     bool show_osd = false;          // flash the matched gesture name on screen

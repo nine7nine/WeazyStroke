@@ -1,8 +1,9 @@
 // eswl-overlay: a transient, click-through, full-screen layer-shell window that
 // draws the live gesture trail. Driven over stdin by the input daemon:
 //   B            begin a new stroke (clear)
-//   P <x> <y>    append a point (in the daemon's screen-pixel space)
+//   P <x> <y> <p>  append a point (screen-pixel space) with pen pressure p (<0 = none)
 //   E            end the stroke (clear the trail)
+//   M <on> <min> <max>  pen pressure -> trail width range (px)
 //   A <x> <y>    show/move the touch "armed" cue (expanding ring) at a point
 //   a            hide the touch armed cue (shrink + fade out)
 //   R <px>       set the armed-cue ring radius
@@ -33,9 +34,13 @@ struct Overlay {
     GMainLoop *loop = nullptr;
     std::vector<double> xs; // points in the daemon's screen space
     std::vector<double> ys;
+    std::vector<double> ps; // per-point pen pressure (0..1; <0 = none), parallel to xs
     double screen_w = 1920.0;
     double screen_h = 1080.0;
-    double width = 4.0;     // trail line width (px), set via the "W" command
+    double width = 4.0;          // trail line width (px), set via "W" (pressure-off)
+    bool pressure_on = true;     // vary pen-trail width by pressure (set via "M")
+    double pressure_min = 2.0;   // trail width (px) at lightest pen pressure
+    double pressure_max = 14.0;  // trail width (px) at hardest pen pressure
     int effect = 0;         // 0 plain, 1 glow, 2 sparkle (set via the "F" command)
     int fade_ms = 380;      // completion fade-out duration (set via the "D" command)
     std::string inbuf;      // accumulates partial stdin lines
@@ -61,6 +66,9 @@ struct Overlay {
     double anchor_close_r = 0.0;   // radius at release (shrink from)
     double anchor_close_a = 0.0;   // alpha at release (fade from)
     double anchor_close_t = 0.0;   // colour progress at release (green->blue out)
+    double anchor_cur_r = 0.0;     // last-rendered radius/alpha/colour while held,
+    double anchor_cur_a = 0.0;     // captured at release so the shrink+fade starts
+    double anchor_cur_t = 0.0;     // from exactly what is on screen
     guint anchor_tick = 0;
 };
 
@@ -101,9 +109,9 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
             const int passes = o->effect == 1 ? 3 : 1;
             const double wmul[3] = {4.6, 2.4, 1.0};
             const double walpha[3] = {0.10, 0.20, 1.0};
+            const bool have_pressure = o->pressure_on && o->ps.size() == n;
             for (int p = passes - 1; p >= 0; --p) {
                 int idx = o->effect == 1 ? p : 2;
-                cairo_set_line_width(cr, o->width * wmul[idx]);
                 for (std::size_t i = i0; i + 1 < n; ++i) {
                     std::size_t ip = i > i0 ? i - 1 : i;        // previous (clamped)
                     std::size_t in = i + 2 < n ? i + 2 : i + 1; // next-next (clamped)
@@ -112,6 +120,18 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
                     double c2x = px(i + 1) - (px(in) - px(i)) / 6.0;
                     double c2y = py(i + 1) - (py(in) - py(i)) / 6.0;
                     double t = static_cast<double>(i) / (n - 1);
+                    // Per-segment width: pen pressure maps min..max; mouse/touch
+                    // (pressure <0) and pressure-off use the constant trail width.
+                    double seg_w = o->width;
+                    if (have_pressure) {
+                        double pr = 0.5 * (o->ps[i] + o->ps[i + 1]);
+                        if (pr >= 0.0) {
+                            if (pr > 1.0)
+                                pr = 1.0;
+                            seg_w = o->pressure_min + (o->pressure_max - o->pressure_min) * pr;
+                        }
+                    }
+                    cairo_set_line_width(cr, seg_w * wmul[idx]);
                     cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx]);
                     cairo_move_to(cr, px(i), py(i));
                     cairo_curve_to(cr, c1x, c1y, c2x, c2y, px(i + 1), py(i + 1));
@@ -148,34 +168,35 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
         cairo_set_antialias(cr, CAIRO_ANTIALIAS_DEFAULT); // restore for OSD text
     }
 
-    // Touch armed cue: once the anchor finger settles (stops dragging) and is
-    // held, a ring grows outward from that point and holds as a halo large
-    // enough to be seen around the fingertip. Dragging restarts the grow (the
-    // daemon resets anchor_start on a significant move). No centre dot — it would
-    // sit under the finger anyway.
+    // Touch armed cue: a ring grows out from the held anchor point and holds as a
+    // halo around the fingertip; dragging just moves it (no centre dot — it sits
+    // under the finger). Colour follows the trail's blue->green direction
+    // gradient, but alpha fades in fast (decoupled from colour) so the blue start
+    // is actually visible, and the green turn is delayed. On release it shrinks +
+    // fades, easing back to blue quickly so it flashes blue on the way out.
     if (o->anchor_on || o->anchor_closing) {
         const double sx = width / o->screen_w;
         const double sy = height / o->screen_h;
         double cx = o->ax * sx, cy = o->ay * sy;
         gint64 now = g_get_monotonic_time();
+        auto clamp01 = [](double v) { return v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v); };
+        auto smooth = [](double v) { return v * v * (3.0 - 2.0 * v); };
         double r, a, t; // radius, alpha, colour progress (0 = blue, 1 = green)
         if (o->anchor_closing) {
-            // Release: shrink + fade out, colour easing green->blue on the way.
-            double cp = static_cast<double>(now - o->anchor_close_start) / (o->anchor_out_ms * 1e3);
-            double e = cp < 1.0 ? 1.0 - cp : 0.0;
+            double el = static_cast<double>(now - o->anchor_close_start) / 1.0e3; // ms
+            double e = clamp01(1.0 - el / o->anchor_out_ms);
             r = o->anchor_close_r * e;
             a = o->anchor_close_a * e;
-            t = o->anchor_close_t * e;
+            // green->blue over the first half of the out time (faster than the fade)
+            t = o->anchor_close_t * (1.0 - smooth(clamp01(el / (o->anchor_out_ms * 0.5))));
         } else {
-            // Held: grow out (smoothstep) to the configured radius, colour easing
-            // blue->green as it expands; then hold.
-            double grow = static_cast<double>(now - o->anchor_start) / (o->anchor_grow_ms * 1e3);
-            if (grow > 1.0)
-                grow = 1.0;
-            double ease = grow * grow * (3.0 - 2.0 * grow);
-            r = ease * o->anchor_r;
-            a = ease * 0.65;
-            t = ease;
+            double el = static_cast<double>(now - o->anchor_start) / 1.0e3; // ms
+            r = smooth(clamp01(el / o->anchor_grow_ms)) * o->anchor_r;
+            a = clamp01(el / 140.0) * 0.65;                                       // fast fade-in
+            t = smooth(clamp01((el - o->anchor_grow_ms * 0.5) / o->anchor_grow_ms)); // delayed green
+            o->anchor_cur_r = r;
+            o->anchor_cur_a = a;
+            o->anchor_cur_t = t;
         }
         if (r >= 0.5 && a > 0.001) {
             // Same blue->green direction colour as the trail: rgba(0, t, 1-t).
@@ -263,6 +284,7 @@ gboolean fade_cb(GtkWidget *, GdkFrameClock *, gpointer data) {
         o->fade_tick = 0;
         o->xs.clear();
         o->ys.clear();
+        o->ps.clear();
         if (o->area)
             gtk_widget_queue_draw(o->area);
         return G_SOURCE_REMOVE;
@@ -279,6 +301,7 @@ void start_fade(Overlay *o) {
     if (o->xs.size() < 2 || !o->area || o->fade_ms <= 0) {
         o->xs.clear();
         o->ys.clear();
+        o->ps.clear();
         if (o->area)
             gtk_widget_queue_draw(o->area);
         return;
@@ -329,15 +352,17 @@ void process_line(Overlay *o, const std::string &line) {
         cancel_fade(o);
         o->xs.clear();
         o->ys.clear();
+        o->ps.clear();
         break;
     case 'E': // end: animate the trail out (start_fade clears when finished)
         start_fade(o);
         return;
     case 'P': {
-        double x = 0, y = 0;
-        if (std::sscanf(line.c_str() + 1, "%lf %lf", &x, &y) == 2) {
+        double x = 0, y = 0, pr = -1.0;
+        if (std::sscanf(line.c_str() + 1, "%lf %lf %lf", &x, &y, &pr) >= 2) {
             o->xs.push_back(x);
             o->ys.push_back(y);
+            o->ps.push_back(pr);
         }
         break;
     }
@@ -359,13 +384,10 @@ void process_line(Overlay *o, const std::string &line) {
             o->fade_ms = d;
         return;
     }
-    case 'A': { // anchor cue on/move: ring grows once the finger settles
+    case 'A': { // anchor cue on / move: grow once on first show, then just follow
         double x = 0, y = 0;
         if (std::sscanf(line.c_str() + 1, "%lf %lf", &x, &y) == 2) {
-            // Restart the grow on first show or a real drag (ignore tiny jitter),
-            // so the ring stays small while moving and grows out once held still.
-            bool moved = std::fabs(x - o->ax) > 6.0 || std::fabs(y - o->ay) > 6.0;
-            if (!o->anchor_on || moved)
+            if (!o->anchor_on) // start the grow on first show; dragging only moves it
                 o->anchor_start = g_get_monotonic_time();
             o->anchor_on = true;
             o->anchor_closing = false; // re-armed before a previous close finished
@@ -376,16 +398,11 @@ void process_line(Overlay *o, const std::string &line) {
         }
         break;
     }
-    case 'a': // anchor cue off -> shrink + fade out from the current size
+    case 'a': // anchor cue off -> shrink + fade out from whatever is on screen
         if (o->anchor_on) {
-            double grow = static_cast<double>(g_get_monotonic_time() - o->anchor_start) /
-                          (o->anchor_grow_ms * 1e3);
-            if (grow > 1.0)
-                grow = 1.0;
-            double ease = grow * grow * (3.0 - 2.0 * grow);
-            o->anchor_close_r = ease * o->anchor_r;
-            o->anchor_close_a = ease * 0.65;
-            o->anchor_close_t = ease; // colour eases green->blue from here
+            o->anchor_close_r = o->anchor_cur_r;
+            o->anchor_close_a = o->anchor_cur_a;
+            o->anchor_close_t = o->anchor_cur_t;
             o->anchor_on = false;
             o->anchor_closing = true;
             o->anchor_close_start = g_get_monotonic_time();
@@ -406,6 +423,17 @@ void process_line(Overlay *o, const std::string &line) {
                 o->anchor_grow_ms = grow;
             if (out > 0)
                 o->anchor_out_ms = out;
+        }
+        return; // no redraw needed
+    }
+    case 'M': { // pen pressure -> width: enabled min_px max_px
+        int on = 1, mn = 0, mx = 0;
+        if (std::sscanf(line.c_str() + 1, "%d %d %d", &on, &mn, &mx) == 3) {
+            o->pressure_on = on != 0;
+            if (mn > 0)
+                o->pressure_min = mn;
+            if (mx > 0)
+                o->pressure_max = mx;
         }
         return; // no redraw needed
     }

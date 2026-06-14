@@ -11,9 +11,11 @@ class TraceOverlay {
 public:
     virtual ~TraceOverlay() = default;
 
-    virtual void begin() = 0;                 // start a fresh stroke (clear old trail)
-    virtual void add(double x, double y) = 0; // append a point (screen-pixel space)
-    virtual void end() = 0;                   // gesture finished; clear the trail
+    virtual void begin() = 0; // start a fresh stroke (clear old trail)
+    // Append a point (screen-pixel space). pressure is 0..1 for the pen, or <0 for
+    // no pressure data (mouse/touch) -> the renderer uses a constant width then.
+    virtual void add(double x, double y, double pressure = -1.0) = 0;
+    virtual void end() = 0; // gesture finished; clear the trail
 
     // Optional "armed" cue shown while the touch anchor finger is held: an
     // expanding ring at (x, y) in screen-pixel space. anchor_show may be called

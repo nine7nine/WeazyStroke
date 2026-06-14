@@ -52,6 +52,12 @@ GestureConfig GestureConfig::load(const std::string &path) {
             cfg.match_threshold = s["match_threshold"].as_number();
         if (s["trace_width"].is_number())
             cfg.trace_width = static_cast<int>(s["trace_width"].as_number());
+        if (s["pressure"].is_bool())
+            cfg.pressure = s["pressure"].as_bool();
+        if (s["pressure_min"].is_number())
+            cfg.pressure_min = static_cast<int>(s["pressure_min"].as_number());
+        if (s["pressure_max"].is_number())
+            cfg.pressure_max = static_cast<int>(s["pressure_max"].as_number());
         if (s["scroll_speed"].is_number())
             cfg.scroll_speed = s["scroll_speed"].as_number();
         if (s["scroll_invert"].is_bool())
@@ -135,6 +141,9 @@ void GestureConfig::save(const std::string &path) const {
     json::Object settings;
     settings["match_threshold"] = json::Value(match_threshold);
     settings["trace_width"] = json::Value(trace_width);
+    settings["pressure"] = json::Value(pressure);
+    settings["pressure_min"] = json::Value(pressure_min);
+    settings["pressure_max"] = json::Value(pressure_max);
     settings["scroll_speed"] = json::Value(scroll_speed);
     settings["scroll_invert"] = json::Value(scroll_invert);
     settings["show_osd"] = json::Value(show_osd);
