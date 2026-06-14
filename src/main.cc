@@ -13,9 +13,12 @@
 #include "process_overlay.h"
 #include "uinput_injector.h"
 
+#include <fcntl.h>
 #include <poll.h>
+#include <sys/file.h>
 #include <unistd.h>
 
+#include <cstdint>
 #include <ctime>
 
 #include <atomic>
@@ -46,6 +49,28 @@ void on_reload(int) { g_reload = true; }
 // SIGUSR1 (raised by the GUI's pause button).
 std::atomic<bool> g_disabled{false};
 void on_toggle(int) { g_disabled = !g_disabled; }
+
+// Single-instance lock so only one daemon runs (a second would double every
+// action). Returns the held fd (kept open for the process lifetime), -1 if
+// another instance already holds it, or -2 if the lock couldn't be created.
+int acquire_singleton_lock() {
+    const char *rt = std::getenv("XDG_RUNTIME_DIR");
+    std::string path = std::string(rt && *rt ? rt : "/tmp") + "/weazystroke.lock";
+    int fd = ::open(path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+    if (fd < 0)
+        return -2;
+    if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        ::close(fd);
+        return -1;
+    }
+    return fd;
+}
+
+uint32_t monotonic_ms() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint32_t>(ts.tv_sec * 1000ull + ts.tv_nsec / 1000000ull);
+}
 
 // Directory of our own executable, so we can find the sibling eswl-overlay
 // binary whether running from the build tree or an install prefix.
@@ -244,7 +269,7 @@ template <typename Pred> void run_loop(InputSource &source, Pred keep_going) {
     pfd.events = POLLIN;
     pfd.revents = 0;
     while (g_running && keep_going()) {
-        int r = ::poll(&pfd, 1, 200);
+        int r = ::poll(&pfd, 1, 50); // short timeout so keep_going() ticks often
         if (r < 0) {
             if (errno == EINTR)
                 continue;
@@ -371,6 +396,13 @@ int main(int argc, char **argv) {
     }
 
     // --- Normal mode ----------------------------------------------------
+    int lock_fd = acquire_singleton_lock();
+    if (lock_fd == -1) {
+        std::fprintf(stderr, "another WeazyStroke daemon is already running; exiting.\n");
+        return 0;
+    }
+    (void)lock_fd; // held for the process lifetime
+
     std::unique_ptr<UinputInjector> injector;
     try {
         injector = std::make_unique<UinputInjector>();
@@ -381,6 +413,7 @@ int main(int argc, char **argv) {
     double threshold = cli_threshold >= 0 ? cli_threshold : cfg.match_threshold;
     GestureRecognizer recognizer(trigger, threshold);
     recognizer.set_required_modifiers(cfg.mode == "mouse" ? cfg.trigger_modifiers : 0);
+    recognizer.set_debounce(trigger == 10 ? 120 : 0); // 10 = pen tip (BTN_TOUCH), debounce chatter
 
     Keymap keymap;
     if (!keymap.ok())
@@ -438,6 +471,7 @@ int main(int argc, char **argv) {
     if (cfg.gestures.empty())
         std::printf("no gestures yet — record one with: %s --record NAME\n", argv[0]);
     run_loop(*source, [&] {
+        recognizer.tick(monotonic_ms()); // finalize debounced (pen-tip) releases
         if (g_reload.exchange(false)) {
             try {
                 cfg = GestureConfig::load(config_path);

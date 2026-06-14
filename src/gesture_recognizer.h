@@ -39,6 +39,15 @@ public:
     void set_threshold(double t) { threshold_ = t; }
     // Modifiers that must be held when the trigger is pressed (mouse mode).
     void set_required_modifiers(unsigned m) { required_mods_ = m; }
+
+    // Debounce the trigger release by `ms` (0 = off). For the pen tip, which
+    // chatters under light pressure: a release that is followed by a press
+    // within the window is treated as one continuous stroke, not a new gesture.
+    void set_debounce(unsigned ms) { debounce_ms_ = ms; }
+
+    // Must be called periodically (from the daemon's poll loop) so a debounced
+    // release finalizes once the window has elapsed with no re-press.
+    void tick(uint32_t now_ms);
     void set_reporter(std::function<void(const Recognition &)> reporter) {
         reporter_ = std::move(reporter);
     }
@@ -57,11 +66,15 @@ public:
 
 private:
     Recognition recognize(const Gesture &g) const;
+    void finalize(); // end the current stroke and run recognition
 
     Button trigger_;
     double threshold_;
     unsigned required_mods_ = 0; // modifiers required at trigger-press (mouse mode)
     unsigned cur_mods_ = 0;      // current modifier state from the source
+    unsigned debounce_ms_ = 0;   // trigger-release debounce window (0 = off)
+    bool pending_end_ = false;   // a debounced release is waiting to finalize
+    uint32_t end_deadline_ = 0;  // when the pending release finalizes (ms)
     bool recording_ = false;
     Point origin_;
     double max_travel_ = 0.0;

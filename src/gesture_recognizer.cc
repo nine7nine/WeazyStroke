@@ -16,10 +16,17 @@ void GestureRecognizer::on_button(Button button, bool pressed, Sample at) {
         return;
 
     if (pressed) {
+        // A re-press within the debounce window resumes the same stroke (the
+        // pen tip "chattered"), rather than starting a new gesture.
+        if (recording_ && pending_end_) {
+            pending_end_ = false;
+            return;
+        }
         // Mouse mode: only start if the required modifiers are held.
         if ((cur_mods_ & required_mods_) != required_mods_)
             return;
         recording_ = true;
+        pending_end_ = false;
         samples_.clear();
         samples_.push_back(at);
         origin_ = {at.x, at.y};
@@ -33,7 +40,23 @@ void GestureRecognizer::on_button(Button button, bool pressed, Sample at) {
 
     if (!recording_)
         return;
+    if (debounce_ms_ > 0) {
+        // Defer finalizing in case the tip presses again (chatter).
+        pending_end_ = true;
+        end_deadline_ = at.time_ms + debounce_ms_;
+        return;
+    }
+    finalize();
+}
+
+void GestureRecognizer::tick(uint32_t now_ms) {
+    if (pending_end_ && static_cast<int32_t>(now_ms - end_deadline_) >= 0)
+        finalize();
+}
+
+void GestureRecognizer::finalize() {
     recording_ = false;
+    pending_end_ = false;
     if (overlay_)
         overlay_->end();
 
