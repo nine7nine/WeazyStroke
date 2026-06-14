@@ -4,6 +4,7 @@
 //   P <x> <y> <p>  append a point (screen-pixel space) with pen pressure p (<0 = none)
 //   E            end the stroke (clear the trail)
 //   M <on> <min> <max>  pen pressure -> trail width range (px)
+//   C <r0 g0 b0 r1 g1 b1>  trail/ring gradient endpoints (start->end, 0..1)
 //   A <x> <y>    show/move the touch "armed" cue (expanding ring) at a point
 //   a            hide the touch armed cue (shrink + fade out)
 //   R <px>       set the armed-cue ring radius
@@ -41,6 +42,8 @@ struct Overlay {
     bool pressure_on = true;     // vary pen-trail width by pressure (set via "M")
     double pressure_min = 2.0;   // trail width (px) at lightest pen pressure
     double pressure_max = 14.0;  // trail width (px) at hardest pen pressure
+    double col_start[3] = {0.0, 0.0, 1.0}; // gradient start (stroke start), set via "C"
+    double col_end[3] = {0.0, 1.0, 0.0};   // gradient end (stroke end)
     int effect = 0;         // 0 plain, 1 glow, 2 sparkle (set via the "F" command)
     int fade_ms = 380;      // completion fade-out duration (set via the "D" command)
     std::string inbuf;      // accumulates partial stdin lines
@@ -152,7 +155,10 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
                             seg_w = 0.3; // a visible hairline, never zero
                     }
                     cairo_set_line_width(cr, seg_w * wmul[idx]);
-                    cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx]);
+                    // Gradient colour eases start->end along the stroke.
+                    cairo_set_source_rgba(cr, lerp(o->col_start[0], o->col_end[0], t),
+                                          lerp(o->col_start[1], o->col_end[1], t),
+                                          lerp(o->col_start[2], o->col_end[2], t), walpha[idx]);
                     if (i == i0 && frac > 1e-3) {
                         // Retract front mid-segment: split the cubic at `frac`
                         // (de Casteljau) and draw only the [frac, 1] part.
@@ -191,7 +197,7 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
                     if ((h >> 10) & 1u)
                         cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, 1.0); // white
                     else
-                        cairo_set_source_rgba(cr, 0.3, 1.0, 0.55, 1.0); // green
+                        cairo_set_source_rgba(cr, o->col_end[0], o->col_end[1], o->col_end[2], 1.0);
                     cairo_rectangle(cr, o->xs[i] * sx + jx, o->ys[i] * sy + jy, sz, sz);
                     cairo_fill(cr);
                 }
@@ -231,8 +237,10 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
             o->anchor_cur_t = t;
         }
         if (r >= 0.5 && a > 0.001) {
-            // Same blue->green direction colour as the trail: rgba(0, t, 1-t).
-            const double cg = t, cb = 1.0 - t;
+            // Same gradient as the trail, eased start->end by the colour progress.
+            double rr = o->col_start[0] + (o->col_end[0] - o->col_start[0]) * t;
+            double rg = o->col_start[1] + (o->col_end[1] - o->col_start[1]) * t;
+            double rb = o->col_start[2] + (o->col_end[2] - o->col_start[2]) * t;
             cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
             if (o->effect == 2) {
                 // Sparkle: hard squares dotted around the circumference.
@@ -249,7 +257,7 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
                     if ((h >> 10) & 1u)
                         cairo_set_source_rgba(cr, 1.0, 1.0, 1.0, a);
                     else
-                        cairo_set_source_rgba(cr, 0.0, cg, cb, a);
+                        cairo_set_source_rgba(cr, rr, rg, rb,a);
                     cairo_rectangle(cr, cx + std::cos(ang) * r + jx, cy + std::sin(ang) * r + jy, sz,
                                     sz);
                     cairo_fill(cr);
@@ -263,7 +271,7 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
                 for (int p = passes - 1; p >= 0; --p) {
                     int idx = o->effect == 1 ? p : 2;
                     cairo_set_line_width(cr, o->width * wmul[idx]);
-                    cairo_set_source_rgba(cr, 0.0, cg, cb, a * walpha[idx]);
+                    cairo_set_source_rgba(cr, rr, rg, rb,a * walpha[idx]);
                     cairo_new_sub_path(cr);
                     cairo_arc(cr, cx, cy, r, 0, 2 * M_PI);
                     cairo_stroke(cr);
@@ -408,6 +416,18 @@ void process_line(Overlay *o, const std::string &line) {
         int e = 0;
         if (std::sscanf(line.c_str() + 1, "%d", &e) == 1)
             o->effect = e;
+        return;
+    }
+    case 'C': { // trail/ring gradient endpoints: r0 g0 b0 r1 g1 b1 (0..1)
+        double a, b, c, d, e, f;
+        if (std::sscanf(line.c_str() + 1, "%lf %lf %lf %lf %lf %lf", &a, &b, &c, &d, &e, &f) == 6) {
+            o->col_start[0] = a;
+            o->col_start[1] = b;
+            o->col_start[2] = c;
+            o->col_end[0] = d;
+            o->col_end[1] = e;
+            o->col_end[2] = f;
+        }
         return;
     }
     case 'D': { // set completion fade-out duration (ms)

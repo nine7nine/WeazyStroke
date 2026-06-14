@@ -124,6 +124,25 @@ TouchEdge parse_edge(const std::string &e) {
     return TouchEdge::None;
 }
 
+// Parse "#rrggbb" into RGB (0..1); leaves outputs unchanged on a bad string.
+void parse_hex_rgb(const std::string &hex, double &r, double &g, double &b) {
+    unsigned rr = 0, gg = 0, bb = 0;
+    if (hex.size() >= 7 && hex[0] == '#' &&
+        std::sscanf(hex.c_str() + 1, "%2x%2x%2x", &rr, &gg, &bb) == 3) {
+        r = rr / 255.0;
+        g = gg / 255.0;
+        b = bb / 255.0;
+    }
+}
+
+// Push the trail/ring gradient endpoints to the overlay.
+void send_trail_colors(ProcessOverlay *ov, const GestureConfig &cfg) {
+    double r0 = 0, g0 = 0, b0 = 1, r1 = 0, g1 = 1, b1 = 0;
+    parse_hex_rgb(cfg.trail_color_start, r0, g0, b0);
+    parse_hex_rgb(cfg.trail_color_end, r1, g1, b1);
+    ov->set_colors(r0, g0, b0, r1, g1, b1);
+}
+
 // Trail effect name -> overlay effect id.
 int effect_id(const std::string &e) {
     if (e == "glow")
@@ -475,6 +494,7 @@ int main(int argc, char **argv) {
             overlay_proc->set_anchor_radius(cfg.touch_ring);
             overlay_proc->set_anchor_timing(cfg.touch_grow_ms, cfg.touch_out_ms);
             overlay_proc->set_pressure(cfg.pressure, cfg.pressure_min, cfg.pressure_max);
+            send_trail_colors(overlay_proc.get(), cfg);
             recognizer.set_overlay(overlay_proc.get());
         } catch (const std::exception &e) {
             std::fprintf(stderr, "warning: overlay unavailable: %s\n", e.what());
@@ -600,6 +620,7 @@ int main(int argc, char **argv) {
                     overlay_proc->set_anchor_radius(cfg.touch_ring);
                     overlay_proc->set_anchor_timing(cfg.touch_grow_ms, cfg.touch_out_ms);
                     overlay_proc->set_pressure(cfg.pressure, cfg.pressure_min, cfg.pressure_max);
+                    send_trail_colors(overlay_proc.get(), cfg);
                 }
                 std::printf("[reload] config reloaded: %zu gesture(s), threshold %.2f\n",
                             cfg.gestures.size(),

@@ -74,6 +74,10 @@ GestureConfig GestureConfig::load(const std::string &path) {
             cfg.trail_effect = s["trail_effect"].as_string();
         if (s["trail_fade_ms"].is_number())
             cfg.trail_fade_ms = static_cast<int>(s["trail_fade_ms"].as_number());
+        if (s["trail_color_start"].is_string())
+            cfg.trail_color_start = s["trail_color_start"].as_string();
+        if (s["trail_color_end"].is_string())
+            cfg.trail_color_end = s["trail_color_end"].as_string();
         if (s["touch_band"].is_number())
             cfg.touch_band = static_cast<int>(s["touch_band"].as_number());
         if (s["touch_cue"].is_bool())
@@ -158,6 +162,8 @@ void GestureConfig::save(const std::string &path) const {
     settings["show_osd"] = json::Value(show_osd);
     settings["trail_effect"] = json::Value(trail_effect);
     settings["trail_fade_ms"] = json::Value(trail_fade_ms);
+    settings["trail_color_start"] = json::Value(trail_color_start);
+    settings["trail_color_end"] = json::Value(trail_color_end);
     settings["touch_band"] = json::Value(touch_band);
     settings["touch_cue"] = json::Value(touch_cue);
     settings["touch_ring"] = json::Value(touch_ring);

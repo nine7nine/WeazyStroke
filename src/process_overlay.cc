@@ -89,6 +89,11 @@ void ProcessOverlay::set_effect(int effect) {
         std::fprintf(pipe_, "F %d\n", effect);
 }
 
+void ProcessOverlay::set_colors(double r0, double g0, double b0, double r1, double g1, double b1) {
+    if (pipe_)
+        std::fprintf(pipe_, "C %.3f %.3f %.3f %.3f %.3f %.3f\n", r0, g0, b0, r1, g1, b1);
+}
+
 void ProcessOverlay::set_fade_ms(int ms) {
     if (pipe_)
         std::fprintf(pipe_, "D %d\n", ms);

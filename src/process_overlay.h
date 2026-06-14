@@ -37,6 +37,10 @@ public:
     // Sets the trail effect: 0 plain, 1 glow, 2 sparkle.
     void set_effect(int effect);
 
+    // Sets the trail/ring gradient endpoints (RGB 0..1): start -> end along the
+    // stroke.
+    void set_colors(double r0, double g0, double b0, double r1, double g1, double b1);
+
     // Sets the completion fade-out duration (ms; 0 = instant).
     void set_fade_ms(int ms);
 

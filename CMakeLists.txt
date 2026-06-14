@@ -21,8 +21,10 @@ pkg_check_modules(XKB REQUIRED IMPORTED_TARGET xkbcommon)
 # GTK4 + layer-shell only for the standalone overlay renderer (eswl-overlay).
 # The core engine and daemon link none of this.
 pkg_check_modules(OVERLAY REQUIRED IMPORTED_TARGET gtk4 gtk4-layer-shell-0)
-# GTK4 alone for the config GUI (eswl-config).
+# GTK4 + libadwaita for the config GUI (eswl-config): Adw provides the
+# AdwCarousel used to paginate Preferences (matching Chiguiro).
 pkg_check_modules(GTK4 REQUIRED IMPORTED_TARGET gtk4)
+pkg_check_modules(ADW REQUIRED IMPORTED_TARGET libadwaita-1)
 # GIO/GDBus for the system-tray helper (eswl-tray) -- StatusNotifierItem over
 # DBus. No GTK; just glib/gio, so the tray stays light.
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0 gio-unix-2.0)
@@ -61,7 +63,7 @@ target_link_libraries(eswl-overlay PRIVATE PkgConfig::OVERLAY)
 # to avoid a sanitizer mismatch and GTK leak noise).
 add_executable(eswl-config src/eswl_config_main.cc src/gesture_config.cc src/json.cc)
 target_include_directories(eswl-config PRIVATE src)
-target_link_libraries(eswl-config PRIVATE PkgConfig::GTK4)
+target_link_libraries(eswl-config PRIVATE PkgConfig::GTK4 PkgConfig::ADW)
 
 # System-tray helper. GIO/GDBus only (StatusNotifierItem); no GTK.
 add_executable(eswl-tray src/eswl_tray_main.cc)

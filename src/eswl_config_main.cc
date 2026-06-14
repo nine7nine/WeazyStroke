@@ -10,6 +10,7 @@
 #include "json.h"
 
 #include <gtk/gtk.h>
+#include <adwaita.h>
 #include <gdk/gdkkeysyms.h>
 
 #include <sys/stat.h>
@@ -176,10 +177,8 @@ void draw_thumb(GtkDrawingArea *, cairo_t *cr, int w, int h, gpointer data) {
 // ----- Styling --------------------------------------------------------------
 
 void load_css() {
-    // Force the dark theme variant so built-in widget colors (entry text,
-    // selections, popovers) are light against our dark translucent window.
-    g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", TRUE, nullptr);
-
+    // Dark variant is forced via AdwStyleManager (ensure_window) so built-in
+    // widget colors stay light against our dark translucent window.
     static const char *kCss = R"css(
 window { background-color: rgba(20, 20, 26, 0.88); color: rgba(255,255,255,0.97); }
 headerbar { background: transparent; box-shadow: none; border: none; }
@@ -304,6 +303,16 @@ headerbar:backdrop, spinbutton:backdrop, spinbutton:backdrop text {
 }
 .colhdr:backdrop, .dim:backdrop { color: rgba(255,255,255,0.58); }
 window:backdrop { color: rgba(255,255,255,0.92); }
+
+/* Preferences carousel: centered title + clickable page dots (à la Chiguiro). */
+.page-title { font-weight: bold; color: rgba(255,255,255,0.92); }
+button.page-dot {
+  min-width: 0; min-height: 0; padding: 2px 5px; font-size: 13px;
+  background: transparent; border: none; box-shadow: none;
+  color: rgba(255,255,255,0.30);
+}
+button.page-dot:hover { color: rgba(255,255,255,0.6); }
+button.page-dot-active { color: rgba(120,200,255,0.95); }
 )css";
     GtkCssProvider *css = gtk_css_provider_new();
     gtk_css_provider_load_from_string(css, kCss);
@@ -748,6 +757,15 @@ void on_accent_color(GObject *btn, GParamSpec *, gpointer d) {
     apply_appearance(s);
     save_appearance(s);
 }
+// Trail/ring gradient endpoints live in the daemon config (persisted on Save).
+void on_trail_start_color(GObject *btn, GParamSpec *, gpointer d) {
+    static_cast<State *>(d)->cfg.trail_color_start =
+        rgba_to_hex(gtk_color_dialog_button_get_rgba(GTK_COLOR_DIALOG_BUTTON(btn)));
+}
+void on_trail_end_color(GObject *btn, GParamSpec *, gpointer d) {
+    static_cast<State *>(d)->cfg.trail_color_end =
+        rgba_to_hex(gtk_color_dialog_button_get_rgba(GTK_COLOR_DIALOG_BUTTON(btn)));
+}
 GtkWidget *make_color_btn(const std::string &hex, GCallback cb, State *s) {
     GtkWidget *btn = gtk_color_dialog_button_new(gtk_color_dialog_new());
     GdkRGBA rgba;
@@ -1089,12 +1107,56 @@ void on_autostart_toggled(GtkCheckButton *cb, gpointer d) {
     }
 }
 
+// Preferences are paginated in an AdwCarousel; this drives the title + dots.
+const char *const kPrefPages[] = {"· Triggers ·", "· Feedback ·", "· Appearance ·"};
+constexpr int kPrefPageCount = 3;
+struct PrefNav {
+    GtkWidget *carousel;
+    GtkWidget *title;
+    GtkWidget *dots[kPrefPageCount];
+};
+void on_prefs_page_changed(GObject *carousel, GParamSpec *, gpointer data) {
+    PrefNav *nav = static_cast<PrefNav *>(data);
+    int page = static_cast<int>(adw_carousel_get_position(ADW_CAROUSEL(carousel)) + 0.5);
+    if (page >= 0 && page < kPrefPageCount)
+        gtk_label_set_label(GTK_LABEL(nav->title), kPrefPages[page]);
+    for (int i = 0; i < kPrefPageCount; ++i) {
+        if (i == page)
+            gtk_widget_add_css_class(nav->dots[i], "page-dot-active");
+        else
+            gtk_widget_remove_css_class(nav->dots[i], "page-dot-active");
+    }
+}
+void on_prefs_dot_clicked(GtkButton *btn, gpointer data) {
+    PrefNav *nav = static_cast<PrefNav *>(data);
+    int idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "page-index"));
+    adw_carousel_scroll_to(ADW_CAROUSEL(nav->carousel),
+                           adw_carousel_get_nth_page(ADW_CAROUSEL(nav->carousel), idx), TRUE);
+}
+
 GtkWidget *build_prefs_page(State *s) {
-    GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_set_margin_start(page, 16);
-    gtk_widget_set_margin_end(page, 16);
-    gtk_widget_set_margin_top(page, 16);
-    gtk_widget_set_margin_bottom(page, 16);
+    // Three carousel pages; the section code below appends to `page`, which is
+    // reassigned at each group boundary so existing widgets need no other change.
+    GtkWidget *carousel = adw_carousel_new();
+    gtk_widget_set_hexpand(carousel, TRUE);
+    gtk_widget_set_valign(carousel, GTK_ALIGN_START);
+    adw_carousel_set_allow_mouse_drag(ADW_CAROUSEL(carousel), TRUE);
+    adw_carousel_set_allow_long_swipes(ADW_CAROUSEL(carousel), TRUE);
+    adw_carousel_set_allow_scroll_wheel(ADW_CAROUSEL(carousel), FALSE);
+    auto make_page = [&]() -> GtkWidget * {
+        GtkWidget *b = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+        gtk_widget_set_margin_start(b, 16);
+        gtk_widget_set_margin_end(b, 16);
+        gtk_widget_set_margin_top(b, 8);
+        gtk_widget_set_margin_bottom(b, 16);
+        gtk_widget_set_hexpand(b, TRUE);
+        adw_carousel_append(ADW_CAROUSEL(carousel), b);
+        return b;
+    };
+    GtkWidget *page1 = make_page();
+    GtkWidget *page2 = make_page();
+    GtkWidget *page3 = make_page();
+    GtkWidget *page = page1;
 
     GtkWidget *mh = gtk_label_new("Button / Pen Trigger");
     gtk_label_set_xalign(GTK_LABEL(mh), 0.0);
@@ -1242,6 +1304,9 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_set_margin_top(tnote, 8);
     gtk_box_append(GTK_BOX(page), tnote);
 
+    // ===== Page 2: Recognition / Feedback / Scroll =====
+    page = page2;
+
     // --- Recognition ----------------------------------------------------
     GtkWidget *rh = gtk_label_new("Recognition");
     gtk_label_set_xalign(GTK_LABEL(rh), 0.0);
@@ -1338,6 +1403,9 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_grid_attach(GTK_GRID(sg), inv, 0, 1, 2, 1);
     gtk_box_append(GTK_BOX(page), sg);
 
+    // ===== Page 3: Appearance / System =====
+    page = page3;
+
     // --- Appearance (glass settings, like Chiguiro) ---------------------
     GtkWidget *ah = gtk_label_new("Appearance");
     gtk_label_set_xalign(GTK_LABEL(ah), 0.0);
@@ -1391,6 +1459,14 @@ GtkWidget *build_prefs_page(State *s) {
     g_signal_connect(fade, "value-changed", G_CALLBACK(on_fade_changed), s);
     gtk_grid_attach(GTK_GRID(grid), fade, 1, 4, 1, 1);
 
+    row_label("Trail color: start / end", 5);
+    GtkWidget *crow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_append(GTK_BOX(crow),
+                   make_color_btn(s->cfg.trail_color_start, G_CALLBACK(on_trail_start_color), s));
+    gtk_box_append(GTK_BOX(crow),
+                   make_color_btn(s->cfg.trail_color_end, G_CALLBACK(on_trail_end_color), s));
+    gtk_grid_attach(GTK_GRID(grid), crow, 1, 5, 1, 1);
+
     gtk_box_append(GTK_BOX(page), grid);
 
     // --- System ---------------------------------------------------------
@@ -1412,12 +1488,43 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_add_css_class(asnote, "dim");
     gtk_box_append(GTK_BOX(page), asnote);
 
-    // The preferences are getting long — make the page scroll vertically.
+    // --- Page header: centered title + clickable dots, above the carousel ---
+    PrefNav *nav = g_new0(PrefNav, 1);
+    nav->carousel = carousel;
+    GtkWidget *header = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_halign(header, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(header, 10);
+    nav->title = gtk_label_new(kPrefPages[0]);
+    gtk_widget_add_css_class(nav->title, "page-title");
+    gtk_box_append(GTK_BOX(header), nav->title);
+    GtkWidget *dots = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_set_halign(dots, GTK_ALIGN_CENTER);
+    for (int i = 0; i < kPrefPageCount; ++i) {
+        GtkWidget *dot = gtk_button_new_with_label("\xe2\x97\x8f"); // ●
+        gtk_widget_add_css_class(dot, "flat");
+        gtk_widget_add_css_class(dot, "page-dot");
+        if (i == 0)
+            gtk_widget_add_css_class(dot, "page-dot-active");
+        g_object_set_data(G_OBJECT(dot), "page-index", GINT_TO_POINTER(i));
+        g_signal_connect(dot, "clicked", G_CALLBACK(on_prefs_dot_clicked), nav);
+        gtk_box_append(GTK_BOX(dots), dot);
+        nav->dots[i] = dot;
+    }
+    gtk_box_append(GTK_BOX(header), dots);
+    g_signal_connect(carousel, "notify::position", G_CALLBACK(on_prefs_page_changed), nav);
+    g_object_set_data_full(G_OBJECT(carousel), "prefnav", nav, g_free);
+
+    GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_box_append(GTK_BOX(root), header);
+    gtk_box_append(GTK_BOX(root), carousel);
+
+    // Pages can be tall — let the whole thing scroll vertically; the carousel
+    // pages swipe horizontally (drag / dots).
     GtkWidget *scroll = gtk_scrolled_window_new();
     gtk_widget_set_vexpand(scroll, TRUE);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER,
                                    GTK_POLICY_AUTOMATIC);
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), page);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), root);
     return scroll;
 }
 
@@ -1515,6 +1622,9 @@ GtkWidget *build_history_page(State *s) {
 void ensure_window(State *s, GtkApplication *app) {
     if (s->window)
         return;
+    // libadwaita owns the theme now; force dark so the glass styling reads right.
+    adw_style_manager_set_color_scheme(adw_style_manager_get_default(),
+                                       ADW_COLOR_SCHEME_FORCE_DARK);
     load_css();
     apply_appearance(s);
 
@@ -1628,8 +1738,8 @@ int main(int argc, char **argv) {
     }
     load_appearance(&state);
 
-    GtkApplication *app =
-        gtk_application_new("org.weazystroke.Config", G_APPLICATION_HANDLES_COMMAND_LINE);
+    GtkApplication *app = GTK_APPLICATION(
+        adw_application_new("org.weazystroke.Config", G_APPLICATION_HANDLES_COMMAND_LINE));
     g_signal_connect(app, "activate", G_CALLBACK(on_activate), &state);
     g_signal_connect(app, "command-line", G_CALLBACK(on_command_line), &state);
     int status = g_application_run(G_APPLICATION(app), argc, argv);

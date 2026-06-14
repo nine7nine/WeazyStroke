@@ -71,6 +71,10 @@ struct GestureConfig {
     bool show_osd = false;          // flash the matched gesture name on screen
     std::string trail_effect = "plain"; // overlay bling: "plain" | "glow" | "sparkle"
     int trail_fade_ms = 380;            // completion fade-out duration (ms; 0 = instant)
+    // Trail/ring gradient endpoints (hex). The colour eases start->end along the
+    // stroke (defaults blue->green, matching the original easystroke direction).
+    std::string trail_color_start = "#0000ff";
+    std::string trail_color_end = "#00ff00";
     std::vector<GestureEntry> gestures;
 
     // Loads from `path`. Returns a default config if the file does not exist;
