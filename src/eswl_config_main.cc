@@ -253,6 +253,13 @@ scale > trough > slider {
   min-width: 16px; min-height: 16px; margin: -7px; border-radius: 50%;
   background-color: rgba(255,255,255,0.9);
 }
+/* Overlay-style scrollbars: invisible trough, just a subtle slider. */
+scrollbar, scrollbar > trough { background: transparent; background-color: transparent; border: none; }
+scrollbar > trough > slider {
+  background-color: rgba(255,255,255,0.22); border-radius: 8px;
+  min-width: 7px; min-height: 7px; margin: 2px;
+}
+scrollbar > trough > slider:hover { background-color: rgba(255,255,255,0.42); }
 .dim { color: rgba(255,255,255,0.62); }
 .colhdr { color: rgba(255,255,255,0.62); font-weight: bold; }
 
