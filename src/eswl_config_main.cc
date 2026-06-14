@@ -1177,7 +1177,13 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_add_css_class(asnote, "dim");
     gtk_box_append(GTK_BOX(page), asnote);
 
-    return page;
+    // The preferences are getting long — make the page scroll vertically.
+    GtkWidget *scroll = gtk_scrolled_window_new();
+    gtk_widget_set_vexpand(scroll, TRUE);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER,
+                                   GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scroll), page);
+    return scroll;
 }
 
 // --- History tab: recent recognition results (written by the daemon) --------
@@ -1278,7 +1284,7 @@ void on_activate(GtkApplication *app, gpointer data) {
 
     s->window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(s->window), "WeazyStroke");
-    gtk_window_set_default_size(GTK_WINDOW(s->window), 720, 500);
+    gtk_window_set_default_size(GTK_WINDOW(s->window), 920, 620);
     g_signal_connect(s->window, "realize", G_CALLBACK(on_window_realize), nullptr);
 
     // Keep client-side decorations (window controls / draggable titlebar) via an
