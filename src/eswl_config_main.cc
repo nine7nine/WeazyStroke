@@ -273,6 +273,14 @@ scrollbar > trough > slider {
   min-width: 7px; min-height: 7px; margin: 2px;
 }
 scrollbar > trough > slider:hover { background-color: rgba(255,255,255,0.42); }
+/* In-window Record sheet: dim backdrop + centered glass card. */
+.sheet-backdrop { background-color: rgba(0,0,0,0.45); }
+.sheet-card {
+  background-color: rgba(26,26,33,0.97);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px; padding: 14px;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.55);
+}
 .dim { color: rgba(255,255,255,0.62); }
 .colhdr { color: rgba(255,255,255,0.62); font-weight: bold; }
 
@@ -785,26 +793,72 @@ void rec_update(GtkGestureDrag *, double ox, double oy, gpointer data) {
     gtk_widget_queue_draw(r->area);
 }
 
+void close_sheet(State *s) {
+    if (!s->sheet)
+        return;
+    GtkWidget *card = s->sheet;
+    GtkWidget *backdrop = GTK_WIDGET(g_object_get_data(G_OBJECT(card), "backdrop"));
+    s->sheet = nullptr;
+    if (backdrop)
+        gtk_overlay_remove_overlay(GTK_OVERLAY(s->overlay), backdrop);
+    gtk_overlay_remove_overlay(GTK_OVERLAY(s->overlay), card); // frees RecordState
+}
+
+// Save the drawn stroke into the selected gesture. append flag is stored on the
+// button: "Replace stroke" clears first, "Add example" appends (multi-template).
+void on_sheet_save(GtkButton *btn, gpointer d) {
+    State *st = static_cast<State *>(d);
+    if (!st->sheet)
+        return;
+    RecordState *r = static_cast<RecordState *>(g_object_get_data(G_OBJECT(st->sheet), "rec"));
+    bool append = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "append"));
+    if (r && r->pts.size() > 2 && st->selected >= 0) {
+        int sel = st->selected;
+        if (!append)
+            st->cfg.gestures[sel].strokes.clear();
+        st->cfg.gestures[sel].strokes.push_back(r->pts);
+        rebuild_list(st);
+        select_index(st, sel);
+    }
+    close_sheet(st);
+}
+void on_sheet_cancel(GtkButton *, gpointer d) { close_sheet(static_cast<State *>(d)); }
+
+// Record Stroke opens an in-window sheet (anchored to the main window) rather
+// than a separate dialog: a dim backdrop + a centered glass card.
 void on_record(GtkButton *, gpointer data) {
     State *s = static_cast<State *>(data);
-    if (s->selected < 0)
+    if (s->selected < 0 || !s->overlay || s->sheet)
         return;
 
     RecordState *r = new RecordState{s, nullptr, 0, 0, {}};
-    GtkWidget *dlg = gtk_window_new();
-    gtk_window_set_title(GTK_WINDOW(dlg), "Record stroke");
-    gtk_window_set_transient_for(GTK_WINDOW(dlg), GTK_WINDOW(s->window));
-    gtk_window_set_modal(GTK_WINDOW(dlg), TRUE);
-    gtk_window_set_default_size(GTK_WINDOW(dlg), 480, 360);
-    // Match the main window: CSD headerbar + transparent (glass) surface.
-    gtk_window_set_titlebar(GTK_WINDOW(dlg), gtk_header_bar_new());
-    g_signal_connect(dlg, "realize", G_CALLBACK(on_window_realize), nullptr);
 
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-    gtk_widget_set_margin_start(box, 8);
-    gtk_widget_set_margin_end(box, 8);
-    gtk_widget_set_margin_top(box, 8);
-    gtk_widget_set_margin_bottom(box, 8);
+    GtkWidget *backdrop = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(backdrop, "sheet-backdrop");
+    gtk_widget_set_halign(backdrop, GTK_ALIGN_FILL);
+    gtk_widget_set_valign(backdrop, GTK_ALIGN_FILL);
+    GtkGesture *bdclick = gtk_gesture_click_new();
+    g_signal_connect(bdclick, "pressed",
+                     G_CALLBACK(+[](GtkGestureClick *, int, double, double, gpointer d) {
+                         close_sheet(static_cast<State *>(d));
+                     }),
+                     s);
+    gtk_widget_add_controller(backdrop, GTK_EVENT_CONTROLLER(bdclick));
+
+    GtkWidget *card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_add_css_class(card, "sheet-card");
+    gtk_widget_set_halign(card, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(card, GTK_ALIGN_CENTER);
+    gtk_widget_set_size_request(card, 460, 380);
+    g_object_set_data(G_OBJECT(card), "backdrop", backdrop);
+    g_object_set_data_full(G_OBJECT(card), "rec", r,
+                           +[](gpointer d) { delete static_cast<RecordState *>(d); });
+    s->sheet = card;
+
+    GtkWidget *hdr = gtk_label_new("Record stroke");
+    gtk_widget_add_css_class(hdr, "colhdr");
+    gtk_label_set_xalign(GTK_LABEL(hdr), 0.0);
+    gtk_box_append(GTK_BOX(card), hdr);
 
     GtkWidget *area = gtk_drawing_area_new();
     r->area = area;
@@ -816,6 +870,7 @@ void on_record(GtkButton *, gpointer data) {
     g_signal_connect(drag, "drag-update", G_CALLBACK(rec_update), r);
     g_signal_connect(drag, "drag-end", G_CALLBACK(rec_update), r);
     gtk_widget_add_controller(area, GTK_EVENT_CONTROLLER(drag));
+    gtk_box_append(GTK_BOX(card), area);
 
     GtkWidget *buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_widget_set_halign(buttons, GTK_ALIGN_END);
@@ -823,48 +878,18 @@ void on_record(GtkButton *, gpointer data) {
     GtkWidget *add = gtk_button_new_with_label("Add example");
     GtkWidget *replace = gtk_button_new_with_label("Replace stroke");
     gtk_widget_add_css_class(replace, "suggested-action");
+    g_object_set_data(G_OBJECT(add), "append", GINT_TO_POINTER(1));
+    g_object_set_data(G_OBJECT(replace), "append", GINT_TO_POINTER(0));
+    g_signal_connect(cancel, "clicked", G_CALLBACK(on_sheet_cancel), s);
+    g_signal_connect(add, "clicked", G_CALLBACK(on_sheet_save), s);
+    g_signal_connect(replace, "clicked", G_CALLBACK(on_sheet_save), s);
     gtk_box_append(GTK_BOX(buttons), cancel);
     gtk_box_append(GTK_BOX(buttons), add);
     gtk_box_append(GTK_BOX(buttons), replace);
+    gtk_box_append(GTK_BOX(card), buttons);
 
-    gtk_box_append(GTK_BOX(box), area);
-    gtk_box_append(GTK_BOX(box), buttons);
-    gtk_window_set_child(GTK_WINDOW(dlg), box);
-
-    g_signal_connect_data(dlg, "destroy", G_CALLBACK(+[](GtkWidget *, gpointer) {}), r,
-                          +[](gpointer d, GClosure *) { delete static_cast<RecordState *>(d); },
-                          GConnectFlags(0));
-    g_signal_connect(cancel, "clicked",
-                     G_CALLBACK(+[](GtkButton *, gpointer d) { gtk_window_destroy(GTK_WINDOW(d)); }),
-                     dlg);
-
-    // "Replace stroke" sets the gesture's only example; "Add example" appends one
-    // (multi-template matching, like recording the same gesture several times).
-    struct OkCtx {
-        RecordState *r;
-        GtkWidget *dlg;
-        bool append;
-    };
-    auto save_cb = +[](GtkButton *, gpointer d) {
-        OkCtx *c = static_cast<OkCtx *>(d);
-        State *st = c->r->app;
-        if (c->r->pts.size() > 2 && st->selected >= 0) {
-            int sel = st->selected;
-            if (!c->append)
-                st->cfg.gestures[sel].strokes.clear();
-            st->cfg.gestures[sel].strokes.push_back(c->r->pts);
-            rebuild_list(st);
-            select_index(st, sel);
-        }
-        gtk_window_destroy(GTK_WINDOW(c->dlg));
-    };
-    auto free_okctx = +[](gpointer d, GClosure *) { delete static_cast<OkCtx *>(d); };
-    g_signal_connect_data(add, "clicked", G_CALLBACK(save_cb), new OkCtx{r, dlg, true}, free_okctx,
-                          GConnectFlags(0));
-    g_signal_connect_data(replace, "clicked", G_CALLBACK(save_cb), new OkCtx{r, dlg, false},
-                          free_okctx, GConnectFlags(0));
-
-    gtk_window_present(GTK_WINDOW(dlg));
+    gtk_overlay_add_overlay(GTK_OVERLAY(s->overlay), backdrop);
+    gtk_overlay_add_overlay(GTK_OVERLAY(s->overlay), card);
 }
 
 // ----- Window construction --------------------------------------------------
@@ -1358,7 +1383,12 @@ void on_activate(GtkApplication *app, gpointer data) {
     gtk_widget_set_margin_start(s->status, 10);
     gtk_widget_set_margin_bottom(s->status, 4);
     gtk_box_append(GTK_BOX(root), s->status);
-    gtk_window_set_child(GTK_WINDOW(s->window), root);
+
+    // Host the Record sheet as an in-window overlay so it's anchored to the
+    // window (centered, moves with it) instead of a separate dialog.
+    s->overlay = gtk_overlay_new();
+    gtk_overlay_set_child(GTK_OVERLAY(s->overlay), root);
+    gtk_window_set_child(GTK_WINDOW(s->window), s->overlay);
 
     rebuild_list(s);
     select_index(s, 0);
