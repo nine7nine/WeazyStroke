@@ -64,7 +64,9 @@ struct State {
     GtkCssProvider *dyn_css = nullptr; // appearance overrides, reloaded live
     GtkWidget *history_list = nullptr; // History tab
     std::string history_path;
-    long history_size = -1; // last-seen size, to refresh only on change
+    long history_size = -1;            // last-seen size, to refresh only on change
+    GtkWidget *overlay = nullptr;      // hosts the in-window Record sheet
+    GtkWidget *sheet = nullptr;        // the open Record sheet card (nullptr = none)
 };
 
 void parse_hex(const std::string &hex, int &r, int &g, int &b) {
@@ -1020,7 +1022,7 @@ GtkWidget *build_prefs_page(State *s) {
 
     GtkWidget *mode = gtk_drop_down_new_from_strings(kModeNames);
     gtk_widget_set_halign(mode, GTK_ALIGN_START);
-    for (int i = 0; kModeValues[i] && i < 3; ++i)
+    for (guint i = 0; i < G_N_ELEMENTS(kModeValues); ++i)
         if (s->cfg.mode == kModeValues[i])
             gtk_drop_down_set_selected(GTK_DROP_DOWN(mode), i);
     g_signal_connect(mode, "notify::selected", G_CALLBACK(on_mode_changed), s);

@@ -73,6 +73,10 @@ set(ESWL_WARNINGS -Wall -Wextra -Wpedantic)
 foreach(tgt ${ESWL_APP_TARGETS})
     target_compile_options(${tgt} PRIVATE ${ESWL_WARNINGS})
 endforeach()
+# GTK targets get -Wall -Wextra (no -Wpedantic; GTK macros are noisy under it).
+foreach(tgt eswl-overlay eswl-config)
+    target_compile_options(${tgt} PRIVATE -Wall -Wextra)
+endforeach()
 # The C++ engine sources get the warnings; stroke.c is recycled verbatim and
 # compiled as C, so keep -Wpedantic off it to avoid noise from upstream style.
 target_compile_options(eswl_core PRIVATE
@@ -81,12 +85,18 @@ target_compile_options(eswl_core PRIVATE
 )
 
 if(ENABLE_ASAN)
+    # ASan instruments globals/heap/stack (catches OOB array reads, use-after-free)
+    # and UBSan catches undefined behaviour — including the GUI/overlay, so bugs
+    # surface in dev instead of only in optimized release builds. Run the GTK apps
+    # with ASAN_OPTIONS=detect_leaks=0 to silence GTK's benign one-shot allocations.
     set(ESWL_SAN -fsanitize=address,undefined -fno-omit-frame-pointer -g)
-    foreach(tgt eswl_core ${ESWL_APP_TARGETS})
+    foreach(tgt eswl_core ${ESWL_APP_TARGETS} eswl-overlay eswl-config)
         target_compile_options(${tgt} PRIVATE ${ESWL_SAN})
         target_link_options(${tgt} PRIVATE ${ESWL_SAN})
     endforeach()
-    message(STATUS "AddressSanitizer + UBSan: ENABLED")
+    message(STATUS "AddressSanitizer + UBSan: ENABLED (incl. GUI/overlay)")
 endif()
 
 install(TARGETS eswl-daemon eswl-overlay eswl-config DESTINATION bin/)
+install(FILES data/weazystroke.svg DESTINATION share/icons/hicolor/scalable/apps/)
+install(FILES data/weazystroke.desktop DESTINATION share/applications/)

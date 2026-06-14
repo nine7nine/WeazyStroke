@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=WeazyStroke
+GenericName=Gesture Recognition
+Comment=Mouse and stylus gesture recognition for Wayland
+Exec=eswl-config
+Icon=weazystroke
+Terminal=false
+Categories=Utility;Settings;Accessibility;
+Keywords=gesture;stylus;pen;mouse;easystroke;
+StartupNotify=true
