@@ -154,7 +154,7 @@ void draw_thumb(GtkDrawingArea *, cairo_t *cr, int w, int h, gpointer data) {
 
     // Badge showing how many examples this gesture has, if more than one.
     if (strokes.size() > 1) {
-        char badge[8];
+        char badge[24];
         std::snprintf(badge, sizeof badge, "×%zu", strokes.size());
         cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, 11);
