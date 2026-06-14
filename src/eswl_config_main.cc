@@ -306,26 +306,10 @@ window:backdrop { color: rgba(255,255,255,0.92); }
 
 /* Preferences carousel: centered title + clickable page dots (à la Chiguiro). */
 .page-title { font-weight: bold; color: rgba(255,255,255,0.92); }
-button.page-dot, button.page-dot:hover, button.page-dot:active,
-button.page-dot:checked, button.page-dot:focus {
-  min-width: 0; min-height: 0; padding: 0 5px; margin: 0;
-  background: none; background-image: none; border: none;
-  box-shadow: none; outline: none;
-}
-button.page-dot { font-size: 16px; color: rgba(255,255,255,0.28); }
-button.page-dot:hover { color: rgba(255,255,255,0.55); }
-button.page-dot-active { color: @accent_color; }
-
-/* Glossy card per carousel page: top highlight over dark glass, rounded. */
-.pref-card {
-  background:
-    linear-gradient(to bottom, rgba(255,255,255,0.08), rgba(255,255,255,0.0) 45%),
-    rgba(26,26,33,0.93);
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 18px;
-  padding: 18px 22px;
-  box-shadow: 0 18px 48px rgba(0,0,0,0.55);
-}
+/* Page dots are plain labels (no button chrome); active = accent. */
+label.page-dot { font-size: 15px; padding: 0 5px; color: rgba(255,255,255,0.26); }
+label.page-dot:hover { color: rgba(255,255,255,0.55); }
+label.page-dot-active { color: @accent_color; }
 )css";
     GtkCssProvider *css = gtk_css_provider_new();
     gtk_css_provider_load_from_string(css, kCss);
@@ -1140,9 +1124,10 @@ void on_prefs_page_changed(GObject *carousel, GParamSpec *, gpointer data) {
             gtk_widget_remove_css_class(nav->dots[i], "page-dot-active");
     }
 }
-void on_prefs_dot_clicked(GtkButton *btn, gpointer data) {
+void on_prefs_dot_released(GtkGestureClick *g, int, double, double, gpointer data) {
     PrefNav *nav = static_cast<PrefNav *>(data);
-    int idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "page-index"));
+    GtkWidget *dot = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(g));
+    int idx = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(dot), "page-index"));
     adw_carousel_scroll_to(ADW_CAROUSEL(nav->carousel),
                            adw_carousel_get_nth_page(ADW_CAROUSEL(nav->carousel), idx), TRUE);
 }
@@ -1156,17 +1141,16 @@ GtkWidget *build_prefs_page(State *s) {
     adw_carousel_set_allow_long_swipes(ADW_CAROUSEL(carousel), TRUE);
     adw_carousel_set_allow_scroll_wheel(ADW_CAROUSEL(carousel), FALSE);
     auto make_page = [&]() -> GtkWidget * {
-        // Centered card; AdwClamp caps width.
+        // Centered, width-capped page (AdwClamp); no card.
         GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-        gtk_widget_add_css_class(content, "pref-card");
         GtkWidget *clamp = adw_clamp_new();
-        adw_clamp_set_maximum_size(ADW_CLAMP(clamp), 600);
+        adw_clamp_set_maximum_size(ADW_CLAMP(clamp), 560);
         adw_clamp_set_child(ADW_CLAMP(clamp), content);
         gtk_widget_set_hexpand(clamp, TRUE);
-        gtk_widget_set_margin_start(clamp, 18);
-        gtk_widget_set_margin_end(clamp, 18);
-        gtk_widget_set_margin_top(clamp, 6);
-        gtk_widget_set_margin_bottom(clamp, 20);
+        gtk_widget_set_margin_start(clamp, 16);
+        gtk_widget_set_margin_end(clamp, 16);
+        gtk_widget_set_margin_top(clamp, 8);
+        gtk_widget_set_margin_bottom(clamp, 16);
         adw_carousel_append(ADW_CAROUSEL(carousel), clamp);
         return content;
     };
@@ -1517,12 +1501,14 @@ GtkWidget *build_prefs_page(State *s) {
     GtkWidget *dots = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_widget_set_halign(dots, GTK_ALIGN_CENTER);
     for (int i = 0; i < kPrefPageCount; ++i) {
-        GtkWidget *dot = gtk_button_new_with_label("\xe2\x97\x8f"); // ●
+        GtkWidget *dot = gtk_label_new("\xe2\x97\x8f"); // ●
         gtk_widget_add_css_class(dot, "page-dot");
         if (i == 0)
             gtk_widget_add_css_class(dot, "page-dot-active");
         g_object_set_data(G_OBJECT(dot), "page-index", GINT_TO_POINTER(i));
-        g_signal_connect(dot, "clicked", G_CALLBACK(on_prefs_dot_clicked), nav);
+        GtkGesture *click = gtk_gesture_click_new();
+        g_signal_connect(click, "released", G_CALLBACK(on_prefs_dot_released), nav);
+        gtk_widget_add_controller(dot, GTK_EVENT_CONTROLLER(click));
         gtk_box_append(GTK_BOX(dots), dot);
         nav->dots[i] = dot;
     }
