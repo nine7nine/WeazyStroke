@@ -49,6 +49,11 @@ private:
     // button events out of range, which would otherwise hang a gesture open).
     void set_pen_held(Button b, bool pressed);
 
+    // Remembers the last position of touch slot `slot` (TOUCH_UP carries no
+    // coordinates, so we report the up at the finger's last known spot).
+    void remember_touch(int slot, Point p);
+    Point touch_at(int slot) const;
+
     InputSink &sink_;
     libinput *li_ = nullptr;
     udev *udev_ = nullptr;
@@ -56,6 +61,7 @@ private:
     int screen_h_;
     Point pos_;
     std::vector<Button> pen_held_; // pen buttons/tip currently down (in proximity)
+    std::vector<Point> touch_pos_; // last position per touch slot (indexed by slot)
     unsigned mods_ = 0;            // current keyboard modifier mask (kMod* bits)
 };
 

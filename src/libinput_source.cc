@@ -110,6 +110,18 @@ void LibinputSource::set_pen_held(Button b, bool pressed) {
     }
 }
 
+void LibinputSource::remember_touch(int slot, Point p) {
+    if (slot < 0)
+        return;
+    if (static_cast<int>(touch_pos_.size()) <= slot)
+        touch_pos_.resize(slot + 1);
+    touch_pos_[slot] = p;
+}
+
+Point LibinputSource::touch_at(int slot) const {
+    return slot >= 0 && slot < static_cast<int>(touch_pos_.size()) ? touch_pos_[slot] : Point{};
+}
+
 void LibinputSource::handle(libinput_event *ev) {
     switch (libinput_event_get_type(ev)) {
     case LIBINPUT_EVENT_DEVICE_ADDED:
@@ -225,6 +237,45 @@ void LibinputSource::handle(libinput_event *ev) {
         }
         // Proximity-in needs nothing more: update_tablet_pos already synced the
         // start position so the first stroke begins where the pen actually is.
+        break;
+    }
+
+    // --- Multitouch (touchscreen) ---------------------------------------
+    // Absolute, slotted events. The recognizer's TouchGate decides which finger
+    // anchors at a screen edge and which one draws; we just forward raw touches.
+    // TOUCH_FRAME / TOUCH_CANCEL are not needed for the edge-anchor MVP.
+
+    case LIBINPUT_EVENT_TOUCH_DOWN: {
+        libinput_event_touch *t = libinput_event_get_touch_event(ev);
+        int slot = libinput_event_touch_get_slot(t);
+        if (slot < 0)
+            slot = 0;
+        Point p{libinput_event_touch_get_x_transformed(t, screen_w_),
+                libinput_event_touch_get_y_transformed(t, screen_h_)};
+        remember_touch(slot, p);
+        sink_.on_touch_down(slot, {p.x, p.y, libinput_event_touch_get_time(t)});
+        break;
+    }
+
+    case LIBINPUT_EVENT_TOUCH_MOTION: {
+        libinput_event_touch *t = libinput_event_get_touch_event(ev);
+        int slot = libinput_event_touch_get_slot(t);
+        if (slot < 0)
+            slot = 0;
+        Point p{libinput_event_touch_get_x_transformed(t, screen_w_),
+                libinput_event_touch_get_y_transformed(t, screen_h_)};
+        remember_touch(slot, p);
+        sink_.on_touch_motion(slot, {p.x, p.y, libinput_event_touch_get_time(t)});
+        break;
+    }
+
+    case LIBINPUT_EVENT_TOUCH_UP: {
+        libinput_event_touch *t = libinput_event_get_touch_event(ev);
+        int slot = libinput_event_touch_get_slot(t);
+        if (slot < 0)
+            slot = 0;
+        Point p = touch_at(slot); // TOUCH_UP has no coordinates of its own
+        sink_.on_touch_up(slot, {p.x, p.y, libinput_event_touch_get_time(t)});
         break;
     }
 

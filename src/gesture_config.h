@@ -39,6 +39,13 @@ struct GestureConfig {
     // gesture (0 = none). Used for the pen "tip + side button" chord, which
     // frees the side button alone for other actions (e.g. a right-click).
     unsigned gate_button = 0;
+    // Edge-anchored two-finger touch gesture: the screen edge the anchor finger
+    // must start from ("none"|"left"|"right"|"top"|"bottom"; "none" disables).
+    // A finger held within touch_band px of that edge arms it; a second finger
+    // draws the stroke. touch_band is stored under "settings". Defaults to the
+    // right edge (left/top/bottom are commonly taken by compositor edge swipes).
+    std::string touch_edge = "right";
+    int touch_band = 30; // px from the edge that counts as the anchor zone
     // Tunable settings (easystroke's Preferences). Recognition + feedback knobs
     // the daemon reads; the GUI edits them. Stored under "settings" in the JSON.
     double match_threshold = 0.6; // recognition accuracy floor (0..1)

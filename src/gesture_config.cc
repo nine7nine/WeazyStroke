@@ -43,6 +43,8 @@ GestureConfig GestureConfig::load(const std::string &path) {
         cfg.trigger_modifiers = static_cast<unsigned>(root["trigger_modifiers"].as_number());
     if (root["gate_button"].is_number())
         cfg.gate_button = static_cast<unsigned>(root["gate_button"].as_number());
+    if (root["touch_edge"].is_string())
+        cfg.touch_edge = root["touch_edge"].as_string();
 
     const json::Value &s = root["settings"];
     if (s.is_object()) {
@@ -60,6 +62,8 @@ GestureConfig GestureConfig::load(const std::string &path) {
             cfg.trail_effect = s["trail_effect"].as_string();
         if (s["trail_fade_ms"].is_number())
             cfg.trail_fade_ms = static_cast<int>(s["trail_fade_ms"].as_number());
+        if (s["touch_band"].is_number())
+            cfg.touch_band = static_cast<int>(s["touch_band"].as_number());
     }
 
     const json::Value &gestures = root["gestures"];
@@ -118,6 +122,7 @@ void GestureConfig::save(const std::string &path) const {
     root["mode"] = json::Value(mode);
     root["trigger_modifiers"] = json::Value(static_cast<int>(trigger_modifiers));
     root["gate_button"] = json::Value(static_cast<int>(gate_button));
+    root["touch_edge"] = json::Value(touch_edge);
 
     json::Object settings;
     settings["match_threshold"] = json::Value(match_threshold);
@@ -127,6 +132,7 @@ void GestureConfig::save(const std::string &path) const {
     settings["show_osd"] = json::Value(show_osd);
     settings["trail_effect"] = json::Value(trail_effect);
     settings["trail_fade_ms"] = json::Value(trail_fade_ms);
+    settings["touch_band"] = json::Value(touch_band);
     root["settings"] = json::Value(std::move(settings));
 
     json::Array out_gestures;

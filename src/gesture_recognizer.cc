@@ -71,15 +71,18 @@ void GestureRecognizer::finalize() {
     pending_end_ = false;
     if (overlay_)
         overlay_->end();
+    run_stroke(samples_, max_travel_);
+}
 
-    // Too little travel => this was a click, not a gesture.
-    if (max_travel_ < kGestureMinTravel || samples_.size() <= 2) {
+void GestureRecognizer::run_stroke(const std::vector<Sample> &samples, double max_travel) {
+    // Too little travel => this was a click/tap, not a gesture.
+    if (max_travel < kGestureMinTravel || samples.size() <= 2) {
         if (reporter_)
-            reporter_(Recognition{false, {}, 0.0, static_cast<int>(samples_.size())});
+            reporter_(Recognition{false, {}, 0.0, static_cast<int>(samples.size())});
         return;
     }
 
-    Gesture g = Gesture::from_samples(samples_);
+    Gesture g = Gesture::from_samples(samples);
     Recognition result = recognize(g);
     if (reporter_)
         reporter_(result);
@@ -91,6 +94,52 @@ void GestureRecognizer::finalize() {
                     b.action();
                 break;
             }
+    }
+}
+
+// --- Edge-anchored two-finger touch -------------------------------------
+// The TouchGate owns the anchor/draw slot policy; here we only accumulate the
+// draw finger's path and reuse the same scoring/dispatch as the button path.
+
+void GestureRecognizer::on_touch_down(int slot, Sample at) {
+    if (touch_.on_down(slot, at.x, at.y) != TouchGate::Down::Draw)
+        return;
+    touch_samples_.clear();
+    touch_samples_.push_back(at);
+    touch_origin_ = {at.x, at.y};
+    touch_travel_ = 0.0;
+    if (overlay_) {
+        overlay_->begin();
+        overlay_->add(at.x, at.y);
+    }
+}
+
+void GestureRecognizer::on_touch_motion(int slot, Sample at) {
+    if (!touch_.is_draw(slot))
+        return;
+    touch_samples_.push_back(at);
+    if (overlay_)
+        overlay_->add(at.x, at.y);
+    double travel = std::hypot(at.x - touch_origin_.x, at.y - touch_origin_.y);
+    if (travel > touch_travel_)
+        touch_travel_ = travel;
+}
+
+void GestureRecognizer::on_touch_up(int slot, Sample) {
+    switch (touch_.on_up(slot)) {
+    case TouchGate::Up::Finalize:
+        if (overlay_)
+            overlay_->end();
+        run_stroke(touch_samples_, touch_travel_);
+        touch_samples_.clear();
+        break;
+    case TouchGate::Up::Cancel:
+        if (overlay_)
+            overlay_->end();
+        touch_samples_.clear();
+        break;
+    case TouchGate::Up::Ignore:
+        break;
     }
 }
 

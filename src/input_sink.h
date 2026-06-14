@@ -15,6 +15,12 @@ public:
     virtual void on_motion(Sample at, double dx, double dy) = 0;
     virtual void on_scroll(double dx, double dy, Sample at) = 0;
 
+    // Multitouch. `slot` identifies the finger (libinput's MT slot). Default:
+    // ignore, so sinks that only care about pointer/pen need not implement them.
+    virtual void on_touch_down(int slot, Sample at) { (void)slot, (void)at; }
+    virtual void on_touch_motion(int slot, Sample at) { (void)slot, (void)at; }
+    virtual void on_touch_up(int slot, Sample at) { (void)slot, (void)at; }
+
     // Current keyboard modifier state (Mod bits), updated as modifiers change.
     // Used to gate the trigger in mouse mode (e.g. Super+click). Default: ignore.
     virtual void on_modifiers(unsigned mask) { (void)mask; }

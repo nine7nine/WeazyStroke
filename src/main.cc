@@ -110,6 +110,19 @@ bool parse_scroll(const std::string &arg, int &dx, int &dy) {
     return true;
 }
 
+// Screen-edge name -> TouchEdge (anything unrecognized, incl. "none", = off).
+TouchEdge parse_edge(const std::string &e) {
+    if (e == "left")
+        return TouchEdge::Left;
+    if (e == "right")
+        return TouchEdge::Right;
+    if (e == "top")
+        return TouchEdge::Top;
+    if (e == "bottom")
+        return TouchEdge::Bottom;
+    return TouchEdge::None;
+}
+
 // Trail effect name -> overlay effect id.
 int effect_id(const std::string &e) {
     if (e == "glow")
@@ -300,6 +313,8 @@ template <typename Pred> void run_loop(InputSource &source, Pred keep_going) {
     std::printf("                   10 pen-tip, 11 pen-button)\n");
     std::printf("  --screen WxH     screen size for pointer tracking (default 1920x1080)\n");
     std::printf("  --threshold T    match score floor 0..1 (default 0.6; lower = more lenient)\n");
+    std::printf("  --touch-edge E   two-finger touch: edge the anchor finger starts from\n");
+    std::printf("                   (none|left|right|top|bottom; overrides the config)\n");
     std::printf("  --overlay        draw the live stroke trail (gtk4 layer-shell overlay)\n");
     std::printf("  --tray           show a system-tray icon (enable/disable, prefs, quit)\n");
     std::printf("  --grab           grab mice (EVIOCGRAB) to suppress the trigger button;\n");
@@ -316,6 +331,7 @@ int main(int argc, char **argv) {
     int screen_h = 1080;
     int button_override = -1;
     double cli_threshold = -1.0; // <0 => take match_threshold from the config
+    std::string touch_edge_override; // empty => take touch_edge from the config
     bool grab = false;
     bool overlay = false;
     bool tray = false;
@@ -336,6 +352,8 @@ int main(int argc, char **argv) {
             record_name = argv[++i];
         } else if (a == "--threshold" && i + 1 < argc) {
             cli_threshold = std::atof(argv[++i]);
+        } else if (a == "--touch-edge" && i + 1 < argc) {
+            touch_edge_override = argv[++i];
         } else if (a == "--grab") {
             grab = true;
         } else if (a == "--overlay") {
@@ -429,6 +447,9 @@ int main(int argc, char **argv) {
     recognizer.set_required_modifiers(cfg.mode == "mouse" ? cfg.trigger_modifiers : 0);
     recognizer.set_gate_button(cfg.gate_button); // pen "tip + side button" chord
     recognizer.set_debounce(trigger == 10 ? 120 : 0); // 10 = pen tip (BTN_TOUCH), debounce chatter
+    TouchEdge touch_edge =
+        parse_edge(!touch_edge_override.empty() ? touch_edge_override : cfg.touch_edge);
+    recognizer.configure_touch(touch_edge, screen_w, screen_h, cfg.touch_band);
 
     Keymap keymap;
     if (!keymap.ok())
@@ -495,6 +516,10 @@ int main(int argc, char **argv) {
                     "gestures and replayed for plain clicks.\n");
     std::printf("easystroke-wayland running: %zu gesture(s), trigger button %u, screen %dx%d.\n",
                 cfg.gestures.size(), trigger, screen_w, screen_h);
+    if (touch_edge != TouchEdge::None)
+        std::printf("two-finger touch: anchor at the %s edge (%dpx band), second finger draws.\n",
+                    (!touch_edge_override.empty() ? touch_edge_override : cfg.touch_edge).c_str(),
+                    cfg.touch_band);
     if (cfg.gestures.empty())
         std::printf("no gestures yet — record one with: %s --record NAME\n", argv[0]);
     bool last_disabled = g_disabled.load();
@@ -519,6 +544,9 @@ int main(int argc, char **argv) {
                 recognizer.set_trigger(ntrig);
                 recognizer.set_gate_button(cfg.gate_button);
                 recognizer.set_debounce(ntrig == 10 ? 120 : 0);
+                recognizer.configure_touch(
+                    parse_edge(!touch_edge_override.empty() ? touch_edge_override : cfg.touch_edge),
+                    screen_w, screen_h, cfg.touch_band);
                 if (overlay_proc) {
                     overlay_proc->set_width(cfg.trace_width);
                     overlay_proc->set_effect(effect_id(cfg.trail_effect));

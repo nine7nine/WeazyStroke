@@ -1,6 +1,7 @@
 #pragma once
 #include "gesture.h"
 #include "input_sink.h"
+#include "touch_gate.h"
 #include "trace_overlay.h"
 
 #include <functional>
@@ -46,6 +47,12 @@ public:
     // side button" chord so the side button alone stays free for other actions.
     void set_gate_button(Button b) { gate_button_ = b; }
 
+    // Enable the edge-anchored two-finger touch gesture: a finger held within
+    // `band_px` of `edge` arms it, a second finger draws the stroke. None = off.
+    void configure_touch(TouchEdge edge, int screen_w, int screen_h, int band_px) {
+        touch_.configure(edge, screen_w, screen_h, band_px);
+    }
+
     // Debounce the trigger release by `ms` (0 = off). For the pen tip, which
     // chatters under light pressure: a release that is followed by a press
     // within the window is treated as one continuous stroke, not a new gesture.
@@ -65,6 +72,9 @@ public:
     void on_motion(Sample at, double dx, double dy) override;
     void on_scroll(double, double, Sample) override {}
     void on_modifiers(unsigned mask) override { cur_mods_ = mask; }
+    void on_touch_down(int slot, Sample at) override;
+    void on_touch_motion(int slot, Sample at) override;
+    void on_touch_up(int slot, Sample at) override;
 
     // Minimum cursor travel (px) before a press+release counts as a gesture
     // rather than a plain click. Matches the X11 default.
@@ -73,6 +83,9 @@ public:
 private:
     Recognition recognize(const Gesture &g) const;
     void finalize(); // end the current stroke and run recognition
+    // Score a captured stroke and run the matching binding (shared by the button
+    // and touch paths). Strokes below the travel/point minimum report no match.
+    void run_stroke(const std::vector<Sample> &samples, double max_travel);
 
     Button trigger_;
     double threshold_;
@@ -87,6 +100,11 @@ private:
     Point origin_;
     double max_travel_ = 0.0;
     std::vector<Sample> samples_;
+    // Edge-anchored two-finger touch path (independent of the button path above).
+    TouchGate touch_;
+    std::vector<Sample> touch_samples_;
+    Point touch_origin_;
+    double touch_travel_ = 0.0;
     std::vector<GestureBinding> bindings_;
     std::function<void(const Recognition &)> reporter_;
     TraceOverlay *overlay_ = nullptr;
