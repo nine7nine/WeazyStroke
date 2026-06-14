@@ -624,6 +624,51 @@ void on_row_selected(GtkListBox *, GtkListBoxRow *row, gpointer data) {
 }
 void free_rowdata(gpointer d) { delete static_cast<RowData *>(d); }
 
+void rebuild_list(State *s);
+void select_index(State *s, int i);
+
+// --- Drag a row's stroke thumbnail to reorder it ---------------------------
+GdkContentProvider *on_row_drag_prepare(GtkDragSource *, double, double, gpointer data) {
+    RowData *rd = static_cast<RowData *>(data);
+    GValue v = G_VALUE_INIT;
+    g_value_init(&v, G_TYPE_INT);
+    g_value_set_int(&v, rd->idx);
+    GdkContentProvider *cp = gdk_content_provider_new_for_value(&v);
+    g_value_unset(&v);
+    return cp;
+}
+
+void on_row_drag_begin(GtkDragSource *src, GdkDrag *, gpointer) {
+    GtkWidget *thumb = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(src));
+    GtkWidget *row = thumb ? gtk_widget_get_parent(thumb) : nullptr;
+    if (row) { // drag a preview of the whole row
+        GdkPaintable *p = gtk_widget_paintable_new(row);
+        gtk_drag_source_set_icon(src, p, 0, 0);
+        g_object_unref(p);
+    }
+}
+
+gboolean on_row_drop(GtkDropTarget *, const GValue *value, double, double, gpointer data) {
+    RowData *rd = static_cast<RowData *>(data);
+    if (!G_VALUE_HOLDS_INT(value))
+        return FALSE;
+    State *s = rd->s;
+    int from = g_value_get_int(value);
+    int to = rd->idx;
+    int n = static_cast<int>(s->cfg.gestures.size());
+    if (from < 0 || from >= n || from == to)
+        return FALSE;
+    GestureEntry moved = s->cfg.gestures[from];
+    s->cfg.gestures.erase(s->cfg.gestures.begin() + from);
+    int dest = from < to ? to - 1 : to; // account for the erase shift
+    dest = std::clamp(dest, 0, static_cast<int>(s->cfg.gestures.size()));
+    s->cfg.gestures.insert(s->cfg.gestures.begin() + dest, std::move(moved));
+    rebuild_list(s);
+    select_index(s, dest);
+    set_status(s, "Reordered — Save to keep.");
+    return TRUE;
+}
+
 GtkWidget *build_row(State *s, int idx) {
     GestureEntry &g = s->cfg.gestures[idx];
     RowData *rd = new RowData{s, idx, nullptr};
@@ -635,6 +680,13 @@ GtkWidget *build_row(State *s, int idx) {
     GtkWidget *thumb = gtk_drawing_area_new();
     gtk_widget_set_size_request(thumb, kThumbW, kThumbH);
     gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(thumb), draw_thumb, rd, nullptr);
+    gtk_widget_set_tooltip_text(thumb, "Drag to reorder");
+    gtk_widget_set_cursor_from_name(thumb, "grab");
+    GtkDragSource *drag = gtk_drag_source_new();
+    gtk_drag_source_set_actions(drag, GDK_ACTION_MOVE);
+    g_signal_connect(drag, "prepare", G_CALLBACK(on_row_drag_prepare), rd);
+    g_signal_connect(drag, "drag-begin", G_CALLBACK(on_row_drag_begin), rd);
+    gtk_widget_add_controller(thumb, GTK_EVENT_CONTROLLER(drag));
     gtk_box_append(GTK_BOX(box), thumb);
 
     GtkWidget *name = gtk_entry_new();
@@ -661,6 +713,10 @@ GtkWidget *build_row(State *s, int idx) {
     GtkEventController *fc = gtk_event_controller_focus_new();
     g_signal_connect(fc, "enter", G_CALLBACK(on_row_focus_enter), rd);
     gtk_widget_add_controller(box, fc);
+
+    GtkDropTarget *drop = gtk_drop_target_new(G_TYPE_INT, GDK_ACTION_MOVE);
+    g_signal_connect(drop, "drop", G_CALLBACK(on_row_drop), rd);
+    gtk_widget_add_controller(box, GTK_EVENT_CONTROLLER(drop));
 
     g_object_set_data_full(G_OBJECT(box), "rd", rd, free_rowdata);
     return box;
