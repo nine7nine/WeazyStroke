@@ -36,6 +36,12 @@ struct Overlay {
     std::string inbuf;      // accumulates partial stdin lines
     std::string osd;        // matched-gesture name to flash (empty = none)
     guint osd_timer = 0;    // timeout source clearing the OSD
+    // Completion fade-out: on stroke end the trail animates away instead of
+    // blanking. `fade` goes 0→1 over the animation, driven by a tick callback.
+    bool fading = false;
+    double fade = 0.0;
+    gint64 fade_start = 0;
+    guint fade_tick = 0;
 };
 
 void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data) {
@@ -51,6 +57,8 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
         const double sx = width / o->screen_w;
         const double sy = height / o->screen_h;
         const std::size_t n = o->xs.size();
+        const double fa = o->fading ? 1.0 - o->fade : 1.0; // global fade-out alpha
+        const double gexp = (o->effect == 1 && o->fading) ? 1.0 + o->fade * 0.9 : 1.0; // glow bloom
         cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
 
@@ -63,29 +71,37 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
         for (int p = passes - 1; p >= 0; --p) {
             // p indexes from the core (0) outward; draw widest/faintest first.
             int idx = o->effect == 1 ? p : 2;
-            cairo_set_line_width(cr, o->width * wmul[idx]);
+            cairo_set_line_width(cr, o->width * wmul[idx] * gexp);
             for (std::size_t i = 0; i + 1 < n; ++i) {
                 double t = static_cast<double>(i) / (n - 1);
-                cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx]);
+                cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx] * fa);
                 cairo_move_to(cr, o->xs[i] * sx, o->ys[i] * sy);
                 cairo_line_to(cr, o->xs[i + 1] * sx, o->ys[i + 1] * sy);
                 cairo_stroke(cr);
             }
         }
 
-        if (o->effect == 2) { // sparkle: fading dots near the head, jittered
+        if (o->effect == 2) { // sparkle: head dots while drawing; scatter (burst) on completion
+            const double spread = 1.0 + o->fade * 3.5;
+            const double grow = 1.0 + o->fade * 1.2;
             for (std::size_t i = 0; i < n; ++i) {
-                double age = n > 1 ? static_cast<double>(n - 1 - i) / (n - 1) : 0.0;
-                if (age > 0.45)
-                    continue;
-                double a = 1.0 - age / 0.45;
+                double a;
+                if (o->fading) {
+                    a = 1.0; // the whole trail sparkles during the burst
+                } else {
+                    double age = n > 1 ? static_cast<double>(n - 1 - i) / (n - 1) : 0.0;
+                    if (age > 0.45)
+                        continue;
+                    a = 1.0 - age / 0.45;
+                }
                 unsigned h = static_cast<unsigned>(i) * 2654435761u + 12345u;
                 double jx = ((h & 0xff) / 255.0 - 0.5) * 16.0;
                 double jy = (((h >> 8) & 0xff) / 255.0 - 0.5) * 16.0;
                 double sz = 1.0 + ((h >> 16) & 0x7) / 7.0 * 2.4;
                 double t = n > 1 ? static_cast<double>(i) / (n - 1) : 0.0;
-                cairo_set_source_rgba(cr, 0.45 + 0.5 * t, 1.0, 0.55 + 0.4 * (1.0 - t), a * 0.85);
-                cairo_arc(cr, o->xs[i] * sx + jx, o->ys[i] * sy + jy, sz, 0, 2 * M_PI);
+                cairo_set_source_rgba(cr, 0.45 + 0.5 * t, 1.0, 0.55 + 0.4 * (1.0 - t), a * 0.85 * fa);
+                cairo_arc(cr, o->xs[i] * sx + jx * spread, o->ys[i] * sy + jy * spread, sz * grow, 0,
+                          2 * M_PI);
                 cairo_fill(cr);
             }
         }
@@ -117,6 +133,50 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
     }
 }
 
+void cancel_fade(Overlay *o) {
+    if (o->fade_tick && o->area)
+        gtk_widget_remove_tick_callback(o->area, o->fade_tick);
+    o->fade_tick = 0;
+    o->fading = false;
+    o->fade = 0.0;
+}
+
+gboolean fade_cb(GtkWidget *, GdkFrameClock *, gpointer data) {
+    Overlay *o = static_cast<Overlay *>(data);
+    const double dur_us = 380000.0; // 380ms
+    double p = static_cast<double>(g_get_monotonic_time() - o->fade_start) / dur_us;
+    if (p >= 1.0) {
+        o->fading = false;
+        o->fade = 0.0;
+        o->fade_tick = 0;
+        o->xs.clear();
+        o->ys.clear();
+        if (o->area)
+            gtk_widget_queue_draw(o->area);
+        return G_SOURCE_REMOVE;
+    }
+    o->fade = p;
+    if (o->area)
+        gtk_widget_queue_draw(o->area);
+    return G_SOURCE_CONTINUE;
+}
+
+// Begin the completion fade-out (or clear immediately if there's nothing to show).
+void start_fade(Overlay *o) {
+    cancel_fade(o);
+    if (o->xs.size() < 2 || !o->area) {
+        o->xs.clear();
+        o->ys.clear();
+        if (o->area)
+            gtk_widget_queue_draw(o->area);
+        return;
+    }
+    o->fading = true;
+    o->fade = 0.0;
+    o->fade_start = g_get_monotonic_time();
+    o->fade_tick = gtk_widget_add_tick_callback(o->area, fade_cb, o, nullptr);
+}
+
 gboolean osd_clear(gpointer data) {
     Overlay *o = static_cast<Overlay *>(data);
     o->osd.clear();
@@ -130,11 +190,14 @@ void process_line(Overlay *o, const std::string &line) {
     if (line.empty())
         return;
     switch (line[0]) {
-    case 'B':
-    case 'E': // begin and end both reset the trail
+    case 'B': // begin: cancel any fade, start a fresh trail
+        cancel_fade(o);
         o->xs.clear();
         o->ys.clear();
         break;
+    case 'E': // end: animate the trail out (start_fade clears when finished)
+        start_fade(o);
+        return;
     case 'P': {
         double x = 0, y = 0;
         if (std::sscanf(line.c_str() + 1, "%lf %lf", &x, &y) == 2) {
