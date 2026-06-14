@@ -35,19 +35,6 @@ namespace {
 const char *const kTypeNames[] = {"(none)", "command", "key",    "text",   "button",
                                   "scroll", "ignore",  "misc",   nullptr};
 
-const char *const kTriggerLabels[] = {"1 — left",
-                                      "2 — middle",
-                                      "3 — right",
-                                      "8 — back",
-                                      "9 — forward",
-                                      "10 — pen tip",
-                                      "11 — pen button",
-                                      "pen tip + side button (hold)",
-                                      nullptr};
-const int kTriggerButtons[] = {1, 2, 3, 8, 9, 10, 11, 10};
-// Optional gate button per trigger entry (0 = none). The chord entry triggers
-// on the pen tip (10) while the side button (11) is held.
-const int kTriggerGates[] = {0, 0, 0, 0, 0, 0, 0, 11};
 
 constexpr int kThumbW = 64;
 constexpr int kThumbH = 40;
@@ -69,7 +56,7 @@ struct State {
     int selected = -1;
     GtkWidget *window = nullptr;
     GtkWidget *listbox = nullptr;
-    GtkWidget *trigger_dropdown = nullptr;
+    GtkWidget *trigger_label = nullptr; // shows the captured trigger
     GtkWidget *status = nullptr;
     GtkCssProvider *dyn_css = nullptr; // appearance overrides, reloaded live
     GtkWidget *history_list = nullptr; // History tab
@@ -715,11 +702,7 @@ void on_delete(GtkButton *, gpointer data) {
 
 void on_save(GtkButton *, gpointer data) {
     State *s = static_cast<State *>(data);
-    guint ti = gtk_drop_down_get_selected(GTK_DROP_DOWN(s->trigger_dropdown));
-    if (ti < G_N_ELEMENTS(kTriggerButtons)) {
-        s->cfg.trigger_button = static_cast<Button>(kTriggerButtons[ti]);
-        s->cfg.gate_button = static_cast<unsigned>(kTriggerGates[ti]);
-    }
+    // trigger_button / gate_button are set by the "Set…" capture flow.
     try {
         s->cfg.save(s->config_path);
         // Ask a running daemon to reload its config (harmless if none runs).
@@ -1104,6 +1087,65 @@ void on_autostart_toggled(GtkCheckButton *cb, gpointer d) {
     }
 }
 
+// Human description of the configured trigger (single button or held chord).
+std::string trigger_desc(const GestureConfig &cfg) {
+    auto name = [](unsigned b) -> std::string {
+        switch (b) {
+        case 1: return "left button";
+        case 2: return "middle button";
+        case 3: return "right button";
+        case 8: return "back button";
+        case 9: return "forward button";
+        case 10: return "pen tip";
+        case 11: return "pen side button";
+        case 12: return "pen 2nd button";
+        default: return "button " + std::to_string(b);
+        }
+    };
+    if (cfg.gate_button)
+        return name(cfg.gate_button) + " + " + name(cfg.trigger_button) + " (hold both)";
+    return name(cfg.trigger_button);
+}
+
+// Result of `eswl-daemon --capture-trigger`: set the trigger from what was pressed.
+void on_capture_done(GObject *src, GAsyncResult *res, gpointer data) {
+    State *s = static_cast<State *>(data);
+    char *out = nullptr;
+    GError *err = nullptr;
+    if (g_subprocess_communicate_utf8_finish(G_SUBPROCESS(src), res, &out, nullptr, &err) && out) {
+        int trig = 0, gate = 0;
+        if (std::sscanf(out, "CAPTURE trigger=%d gate=%d", &trig, &gate) >= 1 && trig > 0) {
+            s->cfg.trigger_button = static_cast<Button>(trig);
+            s->cfg.gate_button = static_cast<unsigned>(gate);
+            if (s->trigger_label)
+                gtk_label_set_text(GTK_LABEL(s->trigger_label), trigger_desc(s->cfg).c_str());
+            set_status(s, "Trigger set — Save to apply.");
+        } else {
+            set_status(s, "No button captured (timed out).");
+        }
+    } else {
+        set_status(s, "Capture failed.");
+    }
+    g_clear_error(&err);
+    g_free(out);
+    g_object_unref(src);
+}
+
+void on_capture_trigger(GtkButton *, gpointer data) {
+    State *s = static_cast<State *>(data);
+    std::string daemon = daemon_exe_path();
+    GError *err = nullptr;
+    GSubprocess *proc = g_subprocess_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE, &err, daemon.c_str(),
+                                         "--capture-trigger", nullptr);
+    if (!proc) {
+        set_status(s, std::string("Capture failed: ") + (err ? err->message : "?"));
+        g_clear_error(&err);
+        return;
+    }
+    set_status(s, "Press the button to use — for a chord, hold one and press the other…");
+    g_subprocess_communicate_utf8_async(proc, nullptr, nullptr, on_capture_done, s);
+}
+
 // Preferences are paginated in an AdwCarousel; this drives the title + dots.
 const char *const kPrefPages[] = {"· Triggers ·", "· Feedback ·", "· Appearance ·"};
 constexpr int kPrefPageCount = 3;
@@ -1164,19 +1206,21 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_add_css_class(mh, "colhdr");
     gtk_box_append(GTK_BOX(page), mh);
 
-    GtkWidget *l = gtk_label_new("Trigger button");
+    GtkWidget *l = gtk_label_new("Trigger");
     gtk_label_set_xalign(GTK_LABEL(l), 0.0);
     gtk_widget_add_css_class(l, "dim");
     gtk_widget_set_margin_top(l, 10);
     gtk_box_append(GTK_BOX(page), l);
 
-    s->trigger_dropdown = gtk_drop_down_new_from_strings(kTriggerLabels);
-    gtk_widget_set_halign(s->trigger_dropdown, GTK_ALIGN_START);
-    for (guint i = 0; i < G_N_ELEMENTS(kTriggerButtons); ++i)
-        if (kTriggerButtons[i] == (int)s->cfg.trigger_button &&
-            kTriggerGates[i] == (int)s->cfg.gate_button)
-            gtk_drop_down_set_selected(GTK_DROP_DOWN(s->trigger_dropdown), i);
-    gtk_box_append(GTK_BOX(page), s->trigger_dropdown);
+    GtkWidget *trigrow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    s->trigger_label = gtk_label_new(trigger_desc(s->cfg).c_str());
+    gtk_label_set_xalign(GTK_LABEL(s->trigger_label), 0.0);
+    gtk_widget_set_hexpand(s->trigger_label, TRUE);
+    GtkWidget *setbtn = gtk_button_new_with_label("Set…");
+    g_signal_connect(setbtn, "clicked", G_CALLBACK(on_capture_trigger), s);
+    gtk_box_append(GTK_BOX(trigrow), s->trigger_label);
+    gtk_box_append(GTK_BOX(trigrow), setbtn);
+    gtk_box_append(GTK_BOX(page), trigrow);
 
     GtkWidget *ml = gtk_label_new("Modifiers (optional, for mouse-button triggers)");
     gtk_label_set_xalign(GTK_LABEL(ml), 0.0);
@@ -1200,9 +1244,9 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_box_append(GTK_BOX(page), modrow);
 
     GtkWidget *note = gtk_label_new(
-        "Pen: 10 = tip, 11 = side button. \"tip + side button\" needs both held to draw,\n"
-        "leaving the side button alone free for other uses (e.g. right-click). Or pick a\n"
-        "mouse button + optional modifiers. Saving applies to the running daemon.");
+        "Click Set… and press the button to use: a pen/mouse button, or hold one and\n"
+        "press another for a \"hold + draw\" chord (e.g. pen tip + side button, which keeps\n"
+        "the side button free for other uses). Saving applies to the running daemon.");
     gtk_label_set_xalign(GTK_LABEL(note), 0.0);
     gtk_widget_add_css_class(note, "dim");
     gtk_widget_set_margin_top(note, 8);

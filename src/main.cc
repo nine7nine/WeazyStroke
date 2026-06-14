@@ -305,6 +305,44 @@ private:
     double travel_ = 0.0;
 };
 
+// Captures the next pressed button (or held-chord) for the GUI's "Set trigger"
+// learn-mode, then signals done. Done on: a button released with nothing else
+// held (single), or a second button pressed while the first is held (chord:
+// first = gate, second = trigger). Wheel buttons are ignored. Reads raw logical
+// buttons so it knows the exact pen button (BTN_STYLUS vs BTN_STYLUS2).
+class TriggerCaptureSink final : public InputSink {
+public:
+    void on_button(Button b, bool pressed, Sample) override {
+        if (done_ || (b >= 4 && b <= 7)) // ignore wheel "buttons"
+            return;
+        if (pressed) {
+            if (held_ && b != first_) { // chord: first held is the gate
+                gate_ = first_;
+                trigger_ = b;
+                done_ = true;
+            } else if (!held_) {
+                first_ = b;
+                held_ = true;
+            }
+        } else if (held_ && b == first_) { // released without a chord -> single
+            trigger_ = first_;
+            gate_ = 0;
+            done_ = true;
+        }
+    }
+    void on_motion(Sample, double, double) override {}
+    void on_scroll(double, double, Sample) override {}
+
+    bool done() const { return done_; }
+    Button trigger() const { return trigger_; }
+    Button gate() const { return gate_; }
+
+private:
+    bool done_ = false;
+    bool held_ = false;
+    Button first_ = 0, trigger_ = 0, gate_ = 0;
+};
+
 // Pumps events from one or more sources until the signal flag clears or
 // `keep_going` returns false. (Touch contact-size adds a second raw-evdev source
 // alongside libinput, so the loop polls every source's fd.)
@@ -333,6 +371,7 @@ template <typename Pred> void run_loop(const std::vector<InputSource *> &sources
     std::printf("  --config PATH    config file (default: %s)\n",
                 GestureConfig::default_path().c_str());
     std::printf("  --record NAME    capture one stroke, save it as NAME, and exit\n");
+    std::printf("  --capture-trigger  print the next pressed button/chord and exit\n");
     std::printf("  --button N       override trigger button (1 left, 2 mid, 3 right, 8/9 thumb,\n");
     std::printf("                   10 pen-tip, 11 pen-button)\n");
     std::printf("  --screen WxH     screen size for pointer tracking (default 1920x1080)\n");
@@ -356,6 +395,7 @@ int main(int argc, char **argv) {
     int button_override = -1;
     double cli_threshold = -1.0; // <0 => take match_threshold from the config
     std::string touch_edge_override; // empty => take touch_edge from the config
+    bool capture_trigger = false;    // print the next pressed button/chord and exit
     bool grab = false;
     bool overlay = false;
     bool tray = false;
@@ -378,6 +418,8 @@ int main(int argc, char **argv) {
             cli_threshold = std::atof(argv[++i]);
         } else if (a == "--touch-edge" && i + 1 < argc) {
             touch_edge_override = argv[++i];
+        } else if (a == "--capture-trigger") {
+            capture_trigger = true;
         } else if (a == "--grab") {
             grab = true;
         } else if (a == "--overlay") {
@@ -448,6 +490,27 @@ int main(int argc, char **argv) {
                         "scroll/ignore), or record the same name again to add another example.\n");
         }
         cfg.save(config_path);
+        return 0;
+    }
+
+    // --- Capture-trigger mode (GUI "Set trigger" learn-mode) ------------
+    // Monitor only (no lock/overlay/tray); print the pressed button/chord, exit.
+    if (capture_trigger) {
+        TriggerCaptureSink cap;
+        std::unique_ptr<LibinputSource> source;
+        try {
+            source = std::make_unique<LibinputSource>(cap, screen_w, screen_h);
+        } catch (const std::exception &e) {
+            std::fprintf(stderr, "error: %s\n", e.what());
+            std::printf("CAPTURE none\n");
+            return 1;
+        }
+        uint32_t start = monotonic_ms();
+        run_loop({source.get()}, [&] { return !cap.done() && monotonic_ms() - start < 10000u; });
+        if (cap.done())
+            std::printf("CAPTURE trigger=%u gate=%u\n", cap.trigger(), cap.gate());
+        else
+            std::printf("CAPTURE none\n");
         return 0;
     }
 
