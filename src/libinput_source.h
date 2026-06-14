@@ -36,6 +36,10 @@ public:
     // a client where the cursor is, so we track it ourselves).
     Point position() const { return pos_; }
 
+    // When a raw-evdev TouchEvdevSource is handling touch (for contact size),
+    // drop libinput's touch events so they are not delivered twice.
+    void set_skip_touch(bool skip) { skip_touch_ = skip; }
+
 private:
     void handle(libinput_event *ev);
     void clamp_position();
@@ -63,6 +67,7 @@ private:
     std::vector<Button> pen_held_; // pen buttons/tip currently down (in proximity)
     std::vector<Point> touch_pos_; // last position per touch slot (indexed by slot)
     double last_pressure_ = 0.0;   // most recent pen pressure (carried across events)
+    bool skip_touch_ = false;      // raw-evdev source owns touch -> drop ours
     unsigned mods_ = 0;            // current keyboard modifier mask (kMod* bits)
 };
 

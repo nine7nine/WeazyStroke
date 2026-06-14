@@ -252,6 +252,8 @@ void LibinputSource::handle(libinput_event *ev) {
     // TOUCH_FRAME / TOUCH_CANCEL are not needed for the edge-anchor MVP.
 
     case LIBINPUT_EVENT_TOUCH_DOWN: {
+        if (skip_touch_)
+            break;
         libinput_event_touch *t = libinput_event_get_touch_event(ev);
         int slot = libinput_event_touch_get_slot(t);
         if (slot < 0)
@@ -264,6 +266,8 @@ void LibinputSource::handle(libinput_event *ev) {
     }
 
     case LIBINPUT_EVENT_TOUCH_MOTION: {
+        if (skip_touch_)
+            break;
         libinput_event_touch *t = libinput_event_get_touch_event(ev);
         int slot = libinput_event_touch_get_slot(t);
         if (slot < 0)
@@ -276,6 +280,8 @@ void LibinputSource::handle(libinput_event *ev) {
     }
 
     case LIBINPUT_EVENT_TOUCH_UP: {
+        if (skip_touch_)
+            break;
         libinput_event_touch *t = libinput_event_get_touch_event(ev);
         int slot = libinput_event_touch_get_slot(t);
         if (slot < 0)

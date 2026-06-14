@@ -981,6 +981,16 @@ void on_band_changed(GtkSpinButton *sp, gpointer d) {
 void on_cue_toggled(GtkCheckButton *cb, gpointer d) {
     static_cast<State *>(d)->cfg.touch_cue = gtk_check_button_get_active(cb);
 }
+void on_touch_pressure_toggled(GtkCheckButton *cb, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_pressure = gtk_check_button_get_active(cb);
+}
+void on_touch_ref_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_pressure_ref = static_cast<int>(gtk_spin_button_get_value(sp));
+}
+void on_touch_floor_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_pressure_floor =
+        static_cast<int>(gtk_spin_button_get_value(sp));
+}
 void on_ring_changed(GtkSpinButton *sp, gpointer d) {
     static_cast<State *>(d)->cfg.touch_ring = static_cast<int>(gtk_spin_button_get_value(sp));
 }
@@ -1201,6 +1211,26 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_check_button_set_active(GTK_CHECK_BUTTON(cue), s->cfg.touch_cue);
     g_signal_connect(cue, "toggled", G_CALLBACK(on_cue_toggled), s);
     gtk_grid_attach(GTK_GRID(tg), cue, 0, 5, 2, 1);
+
+    GtkWidget *tpcb = gtk_check_button_new_with_label(
+        "Pressure-sensitive touch width (finger contact size)");
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(tpcb), s->cfg.touch_pressure);
+    g_signal_connect(tpcb, "toggled", G_CALLBACK(on_touch_pressure_toggled), s);
+    gtk_grid_attach(GTK_GRID(tg), tpcb, 0, 6, 2, 1);
+
+    GtkWidget *trefl = gtk_label_new("Contact size: thin / full");
+    gtk_label_set_xalign(GTK_LABEL(trefl), 0.0);
+    gtk_grid_attach(GTK_GRID(tg), trefl, 0, 7, 1, 1);
+    GtkWidget *trow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget *tfloor = gtk_spin_button_new_with_range(0, 4000, 10);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(tfloor), s->cfg.touch_pressure_floor);
+    g_signal_connect(tfloor, "value-changed", G_CALLBACK(on_touch_floor_changed), s);
+    GtkWidget *tref = gtk_spin_button_new_with_range(0, 4000, 10);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(tref), s->cfg.touch_pressure_ref);
+    g_signal_connect(tref, "value-changed", G_CALLBACK(on_touch_ref_changed), s);
+    gtk_box_append(GTK_BOX(trow), tfloor);
+    gtk_box_append(GTK_BOX(trow), tref);
+    gtk_grid_attach(GTK_GRID(tg), trow, 1, 7, 1, 1);
     gtk_box_append(GTK_BOX(page), tg);
 
     GtkWidget *tnote = gtk_label_new(

@@ -58,6 +58,14 @@ struct GestureConfig {
     bool pressure = true;         // pen pressure varies the trail width
     int pressure_min = 2;         // trail width (px) at lightest pen pressure
     int pressure_max = 14;        // trail width (px) at hardest pen pressure
+    // Touch contact-area -> pseudo-pressure (read from the raw touchscreen, since
+    // libinput hides it), so two-finger trails also thicken under a fatter touch.
+    bool touch_pressure = true;     // use contact size for touch trail width
+    // Contact-size band mapped onto the width range: floor -> thinnest, ref ->
+    // full width. A narrow real range (touch contact barely varies) is stretched
+    // across the width range, so the thin/thick effect is pronounced.
+    int touch_pressure_floor = 150; // TOUCH_MAJOR at/below which the trail is thinnest
+    int touch_pressure_ref = 500;   // TOUCH_MAJOR mapped to full width (0 = device max)
     double scroll_speed = 1.0;    // multiplier for scroll actions
     bool scroll_invert = false;   // invert scroll-action direction
     bool show_osd = false;          // flash the matched gesture name on screen

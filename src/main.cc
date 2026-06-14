@@ -10,6 +10,7 @@
 #include "keymap.h"
 #include "libinput_source.h"
 #include "process.h"
+#include "touch_evdev_source.h"
 #include "process_overlay.h"
 #include "process_tray.h"
 #include "uinput_injector.h"
@@ -285,22 +286,26 @@ private:
     double travel_ = 0.0;
 };
 
-// Pumps events until the signal flag clears or `keep_going` returns false.
-template <typename Pred> void run_loop(InputSource &source, Pred keep_going) {
-    pollfd pfd;
-    pfd.fd = source.fd();
-    pfd.events = POLLIN;
-    pfd.revents = 0;
+// Pumps events from one or more sources until the signal flag clears or
+// `keep_going` returns false. (Touch contact-size adds a second raw-evdev source
+// alongside libinput, so the loop polls every source's fd.)
+template <typename Pred> void run_loop(const std::vector<InputSource *> &sources, Pred keep_going) {
+    std::vector<pollfd> pfds;
+    pfds.reserve(sources.size());
+    for (InputSource *s : sources)
+        pfds.push_back(pollfd{s->fd(), POLLIN, 0});
     while (g_running && keep_going()) {
-        int r = ::poll(&pfd, 1, 50); // short timeout so keep_going() ticks often
+        int r = ::poll(pfds.data(), pfds.size(), 50); // short timeout so keep_going() ticks often
         if (r < 0) {
             if (errno == EINTR)
                 continue;
             std::perror("poll");
             break;
         }
-        if (r > 0 && (pfd.revents & POLLIN))
-            source.dispatch();
+        if (r > 0)
+            for (std::size_t i = 0; i < pfds.size(); ++i)
+                if (pfds[i].revents & POLLIN)
+                    sources[i]->dispatch();
     }
 }
 
@@ -394,7 +399,7 @@ int main(int argc, char **argv) {
         }
         std::printf("Recording '%s': hold button %u, draw the stroke, then release.\n",
                     record_name.c_str(), trigger);
-        run_loop(*source, [&] { return !rec.done(); });
+        run_loop({source.get()}, [&] { return !rec.done(); });
         if (!rec.done()) {
             std::printf("aborted; nothing saved.\n");
             return 1;
@@ -500,13 +505,45 @@ int main(int argc, char **argv) {
     }
 
     std::unique_ptr<InputSource> source;
+    std::unique_ptr<TouchEvdevSource> touch_source;
+    std::vector<InputSource *> sources;
     try {
         if (grab) {
             if (!inj)
                 throw std::runtime_error("--grab needs uinput (forwarding requires injection)");
             source = std::make_unique<EvdevSource>(recognizer, *inj, trigger, screen_w, screen_h);
+            sources.push_back(source.get());
         } else {
-            source = std::make_unique<LibinputSource>(recognizer, screen_w, screen_h);
+            auto li = std::make_unique<LibinputSource>(recognizer, screen_w, screen_h);
+            // Touch contact-area thickness: read the raw touchscreen ourselves
+            // (libinput hides contact size) and silence libinput's own touch so
+            // events aren't doubled. Best-effort: fall back to libinput touch.
+            if (cfg.touch_pressure && touch_edge != TouchEdge::None) {
+                try {
+                    touch_source = std::make_unique<TouchEvdevSource>(recognizer, screen_w, screen_h,
+                                                                      cfg.touch_pressure_ref);
+                    touch_source->set_pressure_floor(cfg.touch_pressure_floor);
+                    li->set_skip_touch(true);
+                    if (touch_source->has_pressure())
+                        std::printf("touch thickness: contact size from '%s' (TOUCH_MAJOR 0..%d; "
+                                    "ref %d%s)\n",
+                                    touch_source->device_name().c_str(),
+                                    touch_source->contact_max(), cfg.touch_pressure_ref,
+                                    cfg.touch_pressure_ref <= 0 ? " = device max" : "");
+                    else
+                        std::printf("touch thickness: '%s' reports no contact size — constant "
+                                    "width\n",
+                                    touch_source->device_name().c_str());
+                } catch (const std::exception &e) {
+                    std::fprintf(stderr, "warning: touch contact size unavailable (%s); "
+                                         "touch trails use constant width\n",
+                                 e.what());
+                }
+            }
+            source = std::move(li);
+            sources.push_back(source.get());
+            if (touch_source)
+                sources.push_back(touch_source.get());
         }
     } catch (const std::exception &e) {
         std::fprintf(stderr, "error: %s\n", e.what());
@@ -527,7 +564,7 @@ int main(int argc, char **argv) {
     if (cfg.gestures.empty())
         std::printf("no gestures yet — record one with: %s --record NAME\n", argv[0]);
     bool last_disabled = g_disabled.load();
-    run_loop(*source, [&] {
+    run_loop(sources, [&] {
         recognizer.tick(monotonic_ms()); // finalize debounced (pen-tip) releases
         // Mirror enable/disable changes (gesture, GUI, or tray-raised SIGUSR1)
         // to the tray so its checkmark/tooltip stay in sync.
@@ -552,6 +589,10 @@ int main(int argc, char **argv) {
                     parse_edge(!touch_edge_override.empty() ? touch_edge_override : cfg.touch_edge),
                     screen_w, screen_h, cfg.touch_band);
                 recognizer.set_touch_cue(cfg.touch_cue);
+                if (touch_source) {
+                    touch_source->set_pressure_ref(cfg.touch_pressure_ref);
+                    touch_source->set_pressure_floor(cfg.touch_pressure_floor);
+                }
                 if (overlay_proc) {
                     overlay_proc->set_width(cfg.trace_width);
                     overlay_proc->set_effect(effect_id(cfg.trail_effect));

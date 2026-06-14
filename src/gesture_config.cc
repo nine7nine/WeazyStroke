@@ -58,6 +58,12 @@ GestureConfig GestureConfig::load(const std::string &path) {
             cfg.pressure_min = static_cast<int>(s["pressure_min"].as_number());
         if (s["pressure_max"].is_number())
             cfg.pressure_max = static_cast<int>(s["pressure_max"].as_number());
+        if (s["touch_pressure"].is_bool())
+            cfg.touch_pressure = s["touch_pressure"].as_bool();
+        if (s["touch_pressure_floor"].is_number())
+            cfg.touch_pressure_floor = static_cast<int>(s["touch_pressure_floor"].as_number());
+        if (s["touch_pressure_ref"].is_number())
+            cfg.touch_pressure_ref = static_cast<int>(s["touch_pressure_ref"].as_number());
         if (s["scroll_speed"].is_number())
             cfg.scroll_speed = s["scroll_speed"].as_number();
         if (s["scroll_invert"].is_bool())
@@ -144,6 +150,9 @@ void GestureConfig::save(const std::string &path) const {
     settings["pressure"] = json::Value(pressure);
     settings["pressure_min"] = json::Value(pressure_min);
     settings["pressure_max"] = json::Value(pressure_max);
+    settings["touch_pressure"] = json::Value(touch_pressure);
+    settings["touch_pressure_floor"] = json::Value(touch_pressure_floor);
+    settings["touch_pressure_ref"] = json::Value(touch_pressure_ref);
     settings["scroll_speed"] = json::Value(scroll_speed);
     settings["scroll_invert"] = json::Value(scroll_invert);
     settings["show_osd"] = json::Value(show_osd);

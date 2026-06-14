@@ -36,6 +36,7 @@ add_library(eswl_core STATIC
     src/button_map.cc
     src/uinput_injector.cc
     src/libinput_source.cc
+    src/touch_evdev_source.cc
     src/json.cc
     src/gesture_config.cc
     src/process.cc
