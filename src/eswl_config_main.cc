@@ -56,7 +56,7 @@ struct State {
     int selected = -1;
     GtkWidget *window = nullptr;
     GtkWidget *listbox = nullptr;
-    GtkWidget *trigger_label = nullptr; // shows the captured trigger
+    GtkWidget *trigger_dropdown = nullptr; // presets + a "Custom" entry
     GtkWidget *status = nullptr;
     GtkCssProvider *dyn_css = nullptr; // appearance overrides, reloaded live
     GtkWidget *history_list = nullptr; // History tab
@@ -1107,6 +1107,53 @@ std::string trigger_desc(const GestureConfig &cfg) {
     return name(cfg.trigger_button);
 }
 
+// Common trigger presets for the dropdown; "Set…" captures anything else.
+struct TrigPreset {
+    const char *label;
+    int trigger;
+    int gate;
+};
+const TrigPreset kTrigPresets[] = {
+    {"Pen tip + side button (hold)", 10, 11}, {"Pen tip", 10, 0},
+    {"Pen side button", 11, 0},               {"Pen 2nd button", 12, 0},
+    {"Right button", 3, 0},                   {"Middle button", 2, 0},
+    {"Left button", 1, 0},                    {"Back button", 8, 0},
+    {"Forward button", 9, 0},
+};
+constexpr guint kTrigPresetCount = 9;
+
+// Reflect cfg in the dropdown: select the matching preset, or show a trailing
+// "Custom: …" entry for a captured button/chord that isn't a preset.
+void select_trigger(State *s) {
+    if (!s->trigger_dropdown)
+        return;
+    GtkDropDown *dd = GTK_DROP_DOWN(s->trigger_dropdown);
+    GtkStringList *model = GTK_STRING_LIST(gtk_drop_down_get_model(dd));
+    guint n = g_list_model_get_n_items(G_LIST_MODEL(model));
+    for (guint i = 0; i < kTrigPresetCount; ++i)
+        if (kTrigPresets[i].trigger == (int)s->cfg.trigger_button &&
+            kTrigPresets[i].gate == (int)s->cfg.gate_button) {
+            gtk_drop_down_set_selected(dd, i);
+            if (n > kTrigPresetCount)
+                gtk_string_list_remove(model, kTrigPresetCount);
+            return;
+        }
+    if (n > kTrigPresetCount)
+        gtk_string_list_remove(model, kTrigPresetCount);
+    std::string desc = "Custom: " + trigger_desc(s->cfg);
+    gtk_string_list_append(model, desc.c_str());
+    gtk_drop_down_set_selected(dd, kTrigPresetCount);
+}
+
+void on_trigger_dropdown(GObject *dd, GParamSpec *, gpointer data) {
+    State *s = static_cast<State *>(data);
+    guint i = gtk_drop_down_get_selected(GTK_DROP_DOWN(dd));
+    if (i < kTrigPresetCount) {
+        s->cfg.trigger_button = static_cast<Button>(kTrigPresets[i].trigger);
+        s->cfg.gate_button = static_cast<unsigned>(kTrigPresets[i].gate);
+    }
+}
+
 // Result of `eswl-daemon --capture-trigger`: set the trigger from what was pressed.
 void on_capture_done(GObject *src, GAsyncResult *res, gpointer data) {
     State *s = static_cast<State *>(data);
@@ -1117,8 +1164,7 @@ void on_capture_done(GObject *src, GAsyncResult *res, gpointer data) {
         if (std::sscanf(out, "CAPTURE trigger=%d gate=%d", &trig, &gate) >= 1 && trig > 0) {
             s->cfg.trigger_button = static_cast<Button>(trig);
             s->cfg.gate_button = static_cast<unsigned>(gate);
-            if (s->trigger_label)
-                gtk_label_set_text(GTK_LABEL(s->trigger_label), trigger_desc(s->cfg).c_str());
+            select_trigger(s); // reflect it in the dropdown (preset or Custom)
             set_status(s, "Trigger set — Save to apply.");
         } else {
             set_status(s, "No button captured (timed out).");
@@ -1213,12 +1259,17 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_box_append(GTK_BOX(page), l);
 
     GtkWidget *trigrow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    s->trigger_label = gtk_label_new(trigger_desc(s->cfg).c_str());
-    gtk_label_set_xalign(GTK_LABEL(s->trigger_label), 0.0);
-    gtk_widget_set_hexpand(s->trigger_label, TRUE);
+    GtkStringList *tmodel = gtk_string_list_new(nullptr);
+    for (guint i = 0; i < kTrigPresetCount; ++i)
+        gtk_string_list_append(tmodel, kTrigPresets[i].label);
+    s->trigger_dropdown = gtk_drop_down_new(G_LIST_MODEL(tmodel), nullptr);
+    gtk_widget_set_hexpand(s->trigger_dropdown, TRUE);
+    gtk_widget_set_halign(s->trigger_dropdown, GTK_ALIGN_START);
+    select_trigger(s); // select the current preset (or add a "Custom" entry)
+    g_signal_connect(s->trigger_dropdown, "notify::selected", G_CALLBACK(on_trigger_dropdown), s);
     GtkWidget *setbtn = gtk_button_new_with_label("Set…");
     g_signal_connect(setbtn, "clicked", G_CALLBACK(on_capture_trigger), s);
-    gtk_box_append(GTK_BOX(trigrow), s->trigger_label);
+    gtk_box_append(GTK_BOX(trigrow), s->trigger_dropdown);
     gtk_box_append(GTK_BOX(trigrow), setbtn);
     gtk_box_append(GTK_BOX(page), trigrow);
 
