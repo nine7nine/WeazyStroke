@@ -87,15 +87,27 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
         const std::size_t n = o->xs.size();
 
         // Completion: the trail's start retracts into the end point — the line
-        // un-draws itself. i0 advances 0 → n-1 over the animation (smoothstep).
+        // un-draws itself. The front advances 0 → n-1 over the animation
+        // (smoothstep), but as a *fractional* position so it glides continuously
+        // along the curve instead of snapping point-to-point (which read as
+        // blocky for short strokes). i0 = integer floor, frac = sub-segment part.
         std::size_t i0 = 0;
+        double frac = 0.0;
         if (o->fading) {
             double e = o->fade * o->fade * (3.0 - 2.0 * o->fade);
-            i0 = static_cast<std::size_t>(e * (n - 1));
-            if (i0 >= n)
+            double frontf = e * (n - 1);
+            i0 = static_cast<std::size_t>(frontf);
+            if (i0 >= n - 1)
                 i0 = n - 1;
+            else
+                frac = frontf - i0;
         }
         {
+            auto lerp = [](double a, double b, double t) { return a + (b - a) * t; };
+            // Onset envelope: ramp the width up from a hairline over the first
+            // few points so each stroke eases in cleanly instead of starting at
+            // full width. Fixed point count -> stable as the live trail grows.
+            const double kRamp = 8.0;
             // Line-based effects. Plain is a single smooth blue→green gradient
             // line (start blue, end green), matching easystroke's Stroke::draw;
             // Glow adds two wide faint underlays first for a soft bloom.
@@ -131,10 +143,30 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
                             seg_w = o->pressure_min + (o->pressure_max - o->pressure_min) * pr;
                         }
                     }
+                    // Onset taper: hairline at the very start, easing to full.
+                    double onset = static_cast<double>(i) / kRamp;
+                    if (onset < 1.0) {
+                        double env = onset * onset * (3.0 - 2.0 * onset);
+                        seg_w *= env;
+                        if (seg_w < 0.3)
+                            seg_w = 0.3; // a visible hairline, never zero
+                    }
                     cairo_set_line_width(cr, seg_w * wmul[idx]);
                     cairo_set_source_rgba(cr, 0.0, t, 1.0 - t, walpha[idx]);
-                    cairo_move_to(cr, px(i), py(i));
-                    cairo_curve_to(cr, c1x, c1y, c2x, c2y, px(i + 1), py(i + 1));
+                    if (i == i0 && frac > 1e-3) {
+                        // Retract front mid-segment: split the cubic at `frac`
+                        // (de Casteljau) and draw only the [frac, 1] part.
+                        double ax = lerp(px(i), c1x, frac), ay = lerp(py(i), c1y, frac);
+                        double bx = lerp(c1x, c2x, frac), by = lerp(c1y, c2y, frac);
+                        double cx = lerp(c2x, px(i + 1), frac), cy = lerp(c2y, py(i + 1), frac);
+                        double dx = lerp(ax, bx, frac), dy = lerp(ay, by, frac);
+                        double ex = lerp(bx, cx, frac), ey = lerp(by, cy, frac);
+                        cairo_move_to(cr, lerp(dx, ex, frac), lerp(dy, ey, frac));
+                        cairo_curve_to(cr, ex, ey, cx, cy, px(i + 1), py(i + 1));
+                    } else {
+                        cairo_move_to(cr, px(i), py(i));
+                        cairo_curve_to(cr, c1x, c1y, c2x, c2y, px(i + 1), py(i + 1));
+                    }
                     cairo_stroke(cr);
                 }
             }
