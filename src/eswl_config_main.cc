@@ -1632,7 +1632,7 @@ void ensure_window(State *s, GtkApplication *app) {
 
     s->window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(s->window), "WeazyStroke");
-    gtk_window_set_default_size(GTK_WINDOW(s->window), 920, 620);
+    gtk_window_set_default_size(GTK_WINDOW(s->window), 920, 940);
     g_signal_connect(s->window, "realize", G_CALLBACK(on_window_realize), nullptr);
 
     // Keep client-side decorations (window controls / draggable titlebar) via an
