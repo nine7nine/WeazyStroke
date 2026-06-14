@@ -306,13 +306,26 @@ window:backdrop { color: rgba(255,255,255,0.92); }
 
 /* Preferences carousel: centered title + clickable page dots (à la Chiguiro). */
 .page-title { font-weight: bold; color: rgba(255,255,255,0.92); }
-button.page-dot {
-  min-width: 0; min-height: 0; padding: 2px 5px; font-size: 13px;
-  background: transparent; border: none; box-shadow: none;
-  color: rgba(255,255,255,0.30);
+button.page-dot, button.page-dot:hover, button.page-dot:active,
+button.page-dot:checked, button.page-dot:focus {
+  min-width: 0; min-height: 0; padding: 0 5px; margin: 0;
+  background: none; background-image: none; border: none;
+  box-shadow: none; outline: none;
 }
-button.page-dot:hover { color: rgba(255,255,255,0.6); }
-button.page-dot-active { color: rgba(120,200,255,0.95); }
+button.page-dot { font-size: 16px; color: rgba(255,255,255,0.28); }
+button.page-dot:hover { color: rgba(255,255,255,0.55); }
+button.page-dot-active { color: @accent_color; }
+
+/* Glossy card per carousel page: top highlight over dark glass, rounded. */
+.pref-card {
+  background:
+    linear-gradient(to bottom, rgba(255,255,255,0.08), rgba(255,255,255,0.0) 45%),
+    rgba(26,26,33,0.93);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 18px;
+  padding: 18px 22px;
+  box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+}
 )css";
     GtkCssProvider *css = gtk_css_provider_new();
     gtk_css_provider_load_from_string(css, kCss);
@@ -1135,8 +1148,7 @@ void on_prefs_dot_clicked(GtkButton *btn, gpointer data) {
 }
 
 GtkWidget *build_prefs_page(State *s) {
-    // Three carousel pages; the section code below appends to `page`, which is
-    // reassigned at each group boundary so existing widgets need no other change.
+    // Sections append to `page`, reassigned at each carousel-page boundary.
     GtkWidget *carousel = adw_carousel_new();
     gtk_widget_set_hexpand(carousel, TRUE);
     gtk_widget_set_valign(carousel, GTK_ALIGN_START);
@@ -1144,14 +1156,19 @@ GtkWidget *build_prefs_page(State *s) {
     adw_carousel_set_allow_long_swipes(ADW_CAROUSEL(carousel), TRUE);
     adw_carousel_set_allow_scroll_wheel(ADW_CAROUSEL(carousel), FALSE);
     auto make_page = [&]() -> GtkWidget * {
-        GtkWidget *b = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-        gtk_widget_set_margin_start(b, 16);
-        gtk_widget_set_margin_end(b, 16);
-        gtk_widget_set_margin_top(b, 8);
-        gtk_widget_set_margin_bottom(b, 16);
-        gtk_widget_set_hexpand(b, TRUE);
-        adw_carousel_append(ADW_CAROUSEL(carousel), b);
-        return b;
+        // Centered card; AdwClamp caps width.
+        GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+        gtk_widget_add_css_class(content, "pref-card");
+        GtkWidget *clamp = adw_clamp_new();
+        adw_clamp_set_maximum_size(ADW_CLAMP(clamp), 600);
+        adw_clamp_set_child(ADW_CLAMP(clamp), content);
+        gtk_widget_set_hexpand(clamp, TRUE);
+        gtk_widget_set_margin_start(clamp, 18);
+        gtk_widget_set_margin_end(clamp, 18);
+        gtk_widget_set_margin_top(clamp, 6);
+        gtk_widget_set_margin_bottom(clamp, 20);
+        adw_carousel_append(ADW_CAROUSEL(carousel), clamp);
+        return content;
     };
     GtkWidget *page1 = make_page();
     GtkWidget *page2 = make_page();
@@ -1501,7 +1518,6 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_set_halign(dots, GTK_ALIGN_CENTER);
     for (int i = 0; i < kPrefPageCount; ++i) {
         GtkWidget *dot = gtk_button_new_with_label("\xe2\x97\x8f"); // ●
-        gtk_widget_add_css_class(dot, "flat");
         gtk_widget_add_css_class(dot, "page-dot");
         if (i == 0)
             gtk_widget_add_css_class(dot, "page-dot-active");
