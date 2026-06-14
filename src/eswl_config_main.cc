@@ -968,10 +968,15 @@ GtkWidget *build_actions_page(State *s) {
 void on_threshold_changed(GtkRange *r, gpointer d) {
     static_cast<State *>(d)->cfg.match_threshold = gtk_range_get_value(r);
 }
-const char *const kModeNames[] = {"Stylus", "Mouse", "Multi-touch (coming soon)", nullptr};
-const char *const kModeValues[] = {"stylus", "mouse", "multitouch"};
-void on_mode_changed(GObject *dd, GParamSpec *, gpointer d) {
-    static_cast<State *>(d)->cfg.mode = kModeValues[gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))];
+// Edge-anchored two-finger touch: which screen edge the anchor finger starts
+// from ("none" disables). Independent of the button trigger — both run at once.
+const char *const kEdgeNames[] = {"Off", "Left", "Right", "Top", "Bottom", nullptr};
+const char *const kEdgeValues[] = {"none", "left", "right", "top", "bottom"};
+void on_edge_changed(GObject *dd, GParamSpec *, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_edge = kEdgeValues[gtk_drop_down_get_selected(GTK_DROP_DOWN(dd))];
+}
+void on_band_changed(GtkSpinButton *sp, gpointer d) {
+    static_cast<State *>(d)->cfg.touch_band = static_cast<int>(gtk_spin_button_get_value(sp));
 }
 void on_mod_toggled(GtkCheckButton *cb, gpointer d) {
     State *s = static_cast<State *>(d);
@@ -1060,18 +1065,10 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_widget_set_margin_top(page, 16);
     gtk_widget_set_margin_bottom(page, 16);
 
-    GtkWidget *mh = gtk_label_new("Activation Mode");
+    GtkWidget *mh = gtk_label_new("Button / Pen Trigger");
     gtk_label_set_xalign(GTK_LABEL(mh), 0.0);
     gtk_widget_add_css_class(mh, "colhdr");
     gtk_box_append(GTK_BOX(page), mh);
-
-    GtkWidget *mode = gtk_drop_down_new_from_strings(kModeNames);
-    gtk_widget_set_halign(mode, GTK_ALIGN_START);
-    for (guint i = 0; i < G_N_ELEMENTS(kModeValues); ++i)
-        if (s->cfg.mode == kModeValues[i])
-            gtk_drop_down_set_selected(GTK_DROP_DOWN(mode), i);
-    g_signal_connect(mode, "notify::selected", G_CALLBACK(on_mode_changed), s);
-    gtk_box_append(GTK_BOX(page), mode);
 
     GtkWidget *l = gtk_label_new("Trigger button");
     gtk_label_set_xalign(GTK_LABEL(l), 0.0);
@@ -1087,7 +1084,7 @@ GtkWidget *build_prefs_page(State *s) {
             gtk_drop_down_set_selected(GTK_DROP_DOWN(s->trigger_dropdown), i);
     gtk_box_append(GTK_BOX(page), s->trigger_dropdown);
 
-    GtkWidget *ml = gtk_label_new("Modifiers (Mouse mode)");
+    GtkWidget *ml = gtk_label_new("Modifiers (optional, for mouse-button triggers)");
     gtk_label_set_xalign(GTK_LABEL(ml), 0.0);
     gtk_widget_add_css_class(ml, "dim");
     gtk_widget_set_margin_top(ml, 10);
@@ -1109,13 +1106,58 @@ GtkWidget *build_prefs_page(State *s) {
     gtk_box_append(GTK_BOX(page), modrow);
 
     GtkWidget *note = gtk_label_new(
-        "Stylus: 11 = side button, 10 = pen tip. \"tip + side button\" needs both held to\n"
-        "draw a gesture, leaving the side button alone free for other uses (e.g. right-click).\n"
-        "Mouse: pick a button + optional modifiers. Saving applies to the running daemon.");
+        "Pen: 10 = tip, 11 = side button. \"tip + side button\" needs both held to draw,\n"
+        "leaving the side button alone free for other uses (e.g. right-click). Or pick a\n"
+        "mouse button + optional modifiers. Saving applies to the running daemon.");
     gtk_label_set_xalign(GTK_LABEL(note), 0.0);
     gtk_widget_add_css_class(note, "dim");
     gtk_widget_set_margin_top(note, 8);
     gtk_box_append(GTK_BOX(page), note);
+
+    // --- Touch (two-finger edge gesture) --------------------------------
+    // Runs alongside the button/pen trigger above, not instead of it.
+    GtkWidget *th = gtk_label_new("Touch (two-finger)");
+    gtk_label_set_xalign(GTK_LABEL(th), 0.0);
+    gtk_widget_add_css_class(th, "colhdr");
+    gtk_widget_set_margin_top(th, 22);
+    gtk_box_append(GTK_BOX(page), th);
+
+    GtkWidget *tg = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(tg), 10);
+    gtk_grid_set_column_spacing(GTK_GRID(tg), 18);
+    gtk_widget_set_halign(tg, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(tg, 6);
+
+    GtkWidget *el = gtk_label_new("Anchor edge");
+    gtk_label_set_xalign(GTK_LABEL(el), 0.0);
+    gtk_widget_set_size_request(el, 160, -1);
+    gtk_grid_attach(GTK_GRID(tg), el, 0, 0, 1, 1);
+    GtkWidget *edge = gtk_drop_down_new_from_strings(kEdgeNames);
+    gtk_widget_set_halign(edge, GTK_ALIGN_START);
+    for (guint i = 0; i < G_N_ELEMENTS(kEdgeValues); ++i)
+        if (s->cfg.touch_edge == kEdgeValues[i])
+            gtk_drop_down_set_selected(GTK_DROP_DOWN(edge), i);
+    g_signal_connect(edge, "notify::selected", G_CALLBACK(on_edge_changed), s);
+    gtk_grid_attach(GTK_GRID(tg), edge, 1, 0, 1, 1);
+
+    GtkWidget *bl = gtk_label_new("Edge band (px)");
+    gtk_label_set_xalign(GTK_LABEL(bl), 0.0);
+    gtk_grid_attach(GTK_GRID(tg), bl, 0, 1, 1, 1);
+    GtkWidget *band = gtk_spin_button_new_with_range(5, 200, 5);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(band), s->cfg.touch_band);
+    gtk_widget_set_halign(band, GTK_ALIGN_START);
+    g_signal_connect(band, "value-changed", G_CALLBACK(on_band_changed), s);
+    gtk_grid_attach(GTK_GRID(tg), band, 1, 1, 1, 1);
+    gtk_box_append(GTK_BOX(page), tg);
+
+    GtkWidget *tnote = gtk_label_new(
+        "Hold one finger inside the chosen edge band, then draw the gesture with a second\n"
+        "finger; lift the drawing finger to fire. (Left/top/bottom are often taken by the\n"
+        "compositor's own edge swipes — right is usually safest.)");
+    gtk_label_set_xalign(GTK_LABEL(tnote), 0.0);
+    gtk_widget_add_css_class(tnote, "dim");
+    gtk_widget_set_margin_top(tnote, 8);
+    gtk_box_append(GTK_BOX(page), tnote);
 
     // --- Recognition ----------------------------------------------------
     GtkWidget *rh = gtk_label_new("Recognition");

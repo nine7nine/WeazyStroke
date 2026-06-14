@@ -444,7 +444,7 @@ int main(int argc, char **argv) {
 
     double threshold = cli_threshold >= 0 ? cli_threshold : cfg.match_threshold;
     GestureRecognizer recognizer(trigger, threshold);
-    recognizer.set_required_modifiers(cfg.mode == "mouse" ? cfg.trigger_modifiers : 0);
+    recognizer.set_required_modifiers(cfg.trigger_modifiers);
     recognizer.set_gate_button(cfg.gate_button); // pen "tip + side button" chord
     recognizer.set_debounce(trigger == 10 ? 120 : 0); // 10 = pen tip (BTN_TOUCH), debounce chatter
     TouchEdge touch_edge =
@@ -537,7 +537,7 @@ int main(int argc, char **argv) {
                 recognizer.clear_bindings();
                 build_bindings(recognizer, cfg, inj, keymap);
                 recognizer.set_threshold(cli_threshold >= 0 ? cli_threshold : cfg.match_threshold);
-                recognizer.set_required_modifiers(cfg.mode == "mouse" ? cfg.trigger_modifiers : 0);
+                recognizer.set_required_modifiers(cfg.trigger_modifiers);
                 // Trigger / gate / debounce can change in the GUI; apply live.
                 Button ntrig = button_override > 0 ? static_cast<Button>(button_override)
                                                    : cfg.trigger_button;
