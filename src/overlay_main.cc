@@ -101,9 +101,10 @@ void draw_cb(GtkDrawingArea *, cairo_t *cr, int width, int height, gpointer data
                 unsigned h = static_cast<unsigned>(i) * 2654435761u + 12345u;
                 double jx = ((h & 0xff) / 255.0 - 0.5) * 16.0;
                 double jy = (((h >> 8) & 0xff) / 255.0 - 0.5) * 16.0;
-                // Particles shrink as the transition completes (they die out).
-                double sz = (1.0 + ((h >> 16) & 0x7) / 7.0 * 2.4) *
-                            (o->fading ? 1.0 - o->fade * 0.85 : 1.0);
+                // Particles shrink to nothing as the transition completes
+                // (quadratic, so they die out quickly).
+                double shrink = o->fading ? (1.0 - o->fade) * (1.0 - o->fade) : 1.0;
+                double sz = (1.0 + ((h >> 16) & 0x7) / 7.0 * 2.4) * shrink;
                 double t = n > 1 ? static_cast<double>(i) / (n - 1) : 0.0;
                 cairo_set_source_rgba(cr, 0.45 + 0.5 * t, 1.0, 0.55 + 0.4 * (1.0 - t), a * 0.85);
                 cairo_arc(cr, o->xs[i] * sx + jx, o->ys[i] * sy + jy, sz, 0, 2 * M_PI);
