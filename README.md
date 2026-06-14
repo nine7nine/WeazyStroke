@@ -6,8 +6,11 @@ key combo, type text, click a button, scroll, and more.
 
 A desktop-environment-agnostic GTK4 + libadwaita app, built on the recognition
 core of the classic [easystroke](https://github.com/thjaeger/easystroke) and
-rebuilt for Wayland. Works on any Wayland compositor (the on-screen trail uses
-`gtk4-layer-shell`, supported everywhere except GNOME).
+rebuilt for Wayland. The gesture engine, GUI, and actions run on any Wayland
+compositor. The only compositor-dependent piece is the **live stroke-trail
+overlay** — it uses the `wlr-layer-shell` protocol (via `gtk4-layer-shell`),
+which KDE, wlroots-based compositors, etc. implement but GNOME's Mutter does
+not, so on GNOME everything works *except* the on-screen trail.
 
 ![WeazyStroke — the Actions table](docs/screenshot.png)
 
