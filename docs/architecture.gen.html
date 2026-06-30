@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke -- Architecture Overview</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  .page-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(36, 40, 59, 0.9);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .page-nav a:hover {
+    background: var(--surface);
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  h4 { color: var(--cyan); font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0.75rem 0 1rem; font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.75rem; text-align: left;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  td { background: var(--bg); }
+  code {
+    background: var(--surface); padding: 0.15rem 0.4rem;
+    border-radius: 3px; font-size: 0.82rem; color: var(--cyan);
+  }
+  pre {
+    background: var(--surface); padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0.75rem 0 1rem;
+    border: 1px solid var(--border);
+  }
+  pre code {
+    display: block; background: transparent; padding: 0;
+    font-size: 0.8rem; color: inherit;
+  }
+  pre code.hljs,
+  code.hljs {
+    background: transparent;
+    padding: 0;
+  }
+  blockquote {
+    background: var(--surface); border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;
+    font-size: 0.82rem;
+  }
+  blockquote strong { color: var(--yellow); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  strong { color: var(--fg); }
+  em { color: var(--muted); font-style: italic; }
+  .diagram-container {
+    display: flex; justify-content: center;
+    margin: 1.25rem auto 1.5rem; padding: 0.75rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    margin: 0 auto;
+    flex: 0 0 auto;
+  }
+  figure.screenshot {
+    margin: 1.25rem auto 1.5rem;
+    padding: 0.6rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.screenshot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.screenshot figcaption {
+    color: var(--muted); font-size: 0.78rem;
+    text-align: center; margin-top: 0.5rem;
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+<div class="page-nav"><a href="index.html">Docs Home</a></div>
+<h1 id="weazystroke--architecture-overview">WeazyStroke &ndash; Architecture Overview</h1>
+
+<p>This page is the system map for WeazyStroke: the four processes, how a stroke travels from a raw device event to an executed action, where each subsystem lives, and the design rules that hold the split together.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#1-what-weazystroke-is">What WeazyStroke is</a></li>
+<li><a href="#2-process-model">Process model</a></li>
+<li><a href="#3-the-gesture-pipeline">The gesture pipeline</a></li>
+<li><a href="#4-permission-model">Permission model</a></li>
+<li><a href="#5-source-layout">Source layout</a></li>
+<li><a href="#6-the-core-library">The core library</a></li>
+<li><a href="#7-design-rules">Design rules</a></li>
+<li><a href="#8-document-index">Document index</a></li>
+</ol>
+
+
+<hr />
+
+<h2 id="1-what-weazystroke-is">1. What WeazyStroke is</h2>
+
+<p>WeazyStroke is gesture recognition for Wayland. You hold a trigger — a mouse button, the pen tip, a stylus chord, or a two-finger touch — draw a stroke, and on release the daemon matches the shape against your recorded gestures and runs the bound action: launch a command, send a key combo, type text, click, scroll, or nothing.</p>
+
+<p>It is a desktop-environment-agnostic rebuild of the classic <a href="https://github.com/thjaeger/easystroke">easystroke</a> (X11) on top of Wayland-native plumbing. The recognition core is recycled verbatim from easystroke; everything around it — input capture, injection, the live trail, the GTK4 GUI — is new. The engine links no GUI toolkit and no Boost: it speaks only to <code>libinput</code>/<code>libevdev</code>, <code>xkbcommon</code>, and the kernel&rsquo;s <code>uinput</code>. That self-containment is the spine of the whole architecture.</p>
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 1000 726" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg      { fill: #1a1b26; }
+    .layer-d { fill: #16242b; stroke: #7dcfff; stroke-width: 1.5; }
+    .layer-e { fill: #1a2235; stroke: #7aa2f7; stroke-width: 1.5; }
+    .layer-o { fill: #1a2a1a; stroke: #9ece6a; stroke-width: 1.5; }
+    .layer-c { fill: #2a1f35; stroke: #bb9af7; stroke-width: 1.5; }
+    .box     { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .box-hot { fill: #2a2438; stroke: #e0af68; stroke-width: 1.5; }
+    .sys     { fill: #1f2535; stroke: #565f89; stroke-width: 1; }
+    .lbl     { fill: #c0caf5; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-sm  { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut { fill: #a9b1d6; font-size: 9px;  font-family: 'JetBrains Mono', monospace; }
+    .lbl-cy  { fill: #7dcfff; font-size: 12px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .lbl-blu { fill: #7aa2f7; font-size: 12px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .lbl-grn { fill: #9ece6a; font-size: 12px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .lbl-pur { fill: #bb9af7; font-size: 12px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .lbl-yel { fill: #e0af68; font-size: 10px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ln      { stroke: #7dcfff; stroke-width: 1.5; fill: none; }
+    .ln-p    { stroke: #bb9af7; stroke-width: 1.5; fill: none; }
+    .bound   { stroke: #6b7398; stroke-width: 1.2; stroke-dasharray: 6,4; fill: none; }
+    .title   { fill: #7aa2f7; font-size: 14px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="726" class="bg" rx="6"/>
+  <text x="500" y="26" text-anchor="middle" class="title">WeazyStroke process &amp; data-flow architecture</text>
+
+  <!-- devices -->
+  <rect x="20" y="44" width="700" height="86" class="layer-d" rx="6"/>
+  <text x="40" y="64" class="lbl-cy">input devices</text>
+  <text x="40" y="78" class="lbl-mut">read from /dev/input/event* (input group / udev rule)</text>
+  <rect x="40"  y="86" width="200" height="34" class="box" rx="6"/>
+  <text x="140" y="107" text-anchor="middle" class="lbl-sm">mouse (relative)</text>
+  <rect x="252" y="86" width="220" height="34" class="box" rx="6"/>
+  <text x="362" y="107" text-anchor="middle" class="lbl-sm">pen / tablet (absolute)</text>
+  <rect x="484" y="86" width="216" height="34" class="box" rx="6"/>
+  <text x="592" y="107" text-anchor="middle" class="lbl-sm">touchscreen (MT slots)</text>
+
+  <!-- capture connector -->
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="120" y1="130" x2="120" y2="184" class="ln"/>
+  <text x="130" y="152" class="lbl-cy">capture</text>
+  <text x="130" y="165" class="lbl-mut">monitor, or EVIOCGRAB</text>
+
+  <!-- daemon engine -->
+  <rect x="20" y="188" width="700" height="178" class="layer-e" rx="6"/>
+  <text x="40" y="208" class="lbl-blu">eswl-daemon  --  input engine (links eswl_core)</text>
+  <text x="40" y="222" class="lbl-mut">singleton (flock); captures, recognizes, dispatches; no GUI toolkit</text>
+
+  <rect x="40"  y="234" width="200" height="118" class="box" rx="6"/>
+  <text x="140" y="254" text-anchor="middle" class="lbl-sm">input sources</text>
+  <text x="140" y="270" text-anchor="middle" class="lbl-mut">LibinputSource</text>
+  <text x="140" y="284" text-anchor="middle" class="lbl-mut">EvdevSource (grab)</text>
+  <text x="140" y="298" text-anchor="middle" class="lbl-mut">TouchEvdevSource</text>
+  <text x="140" y="320" text-anchor="middle" class="lbl-mut">normalize to Samples</text>
+  <text x="140" y="334" text-anchor="middle" class="lbl-mut">(x, y, t, pressure)</text>
+
+  <rect x="252" y="234" width="210" height="118" class="box-hot" rx="6"/>
+  <text x="357" y="254" text-anchor="middle" class="lbl-yel">gesture recognizer</text>
+  <text x="357" y="272" text-anchor="middle" class="lbl-mut">trigger gate / touch gate</text>
+  <text x="357" y="286" text-anchor="middle" class="lbl-mut">accumulate on hold</text>
+  <text x="357" y="300" text-anchor="middle" class="lbl-mut">match on release via</text>
+  <text x="357" y="314" text-anchor="middle" class="lbl-mut">stroke.c (recycled)</text>
+  <text x="357" y="334" text-anchor="middle" class="lbl-mut">best-of-templates</text>
+
+  <rect x="474" y="234" width="226" height="118" class="box" rx="6"/>
+  <text x="587" y="254" text-anchor="middle" class="lbl-sm">action dispatch</text>
+  <text x="587" y="272" text-anchor="middle" class="lbl-mut">command / key / text</text>
+  <text x="587" y="286" text-anchor="middle" class="lbl-mut">button / scroll / ignore</text>
+  <text x="587" y="300" text-anchor="middle" class="lbl-mut">keymap (xkbcommon)</text>
+  <text x="587" y="314" text-anchor="middle" class="lbl-mut">run_command (fork)</text>
+  <text x="587" y="334" text-anchor="middle" class="lbl-mut">UinputInjector</text>
+
+  <!-- child processes column -->
+  <rect x="740" y="44" width="240" height="322" class="layer-o" rx="6"/>
+  <text x="760" y="64" class="lbl-grn">child processes</text>
+  <text x="760" y="78" class="lbl-mut">forked by the daemon,</text>
+  <text x="760" y="91" class="lbl-mut">fed a line protocol over a pipe</text>
+
+  <rect x="760" y="104" width="200" height="120" class="box" rx="6"/>
+  <text x="860" y="124" text-anchor="middle" class="lbl-sm">eswl-overlay</text>
+  <text x="860" y="140" text-anchor="middle" class="lbl-mut">GTK4 + layer-shell</text>
+  <text x="860" y="154" text-anchor="middle" class="lbl-mut">click-through trail</text>
+  <text x="860" y="168" text-anchor="middle" class="lbl-mut">Cairo effects, OSD</text>
+  <text x="860" y="188" text-anchor="middle" class="lbl-mut">B / P / E / A / a ...</text>
+  <text x="860" y="202" text-anchor="middle" class="lbl-mut">self-healing respawn</text>
+
+  <rect x="760" y="236" width="200" height="116" class="box" rx="6"/>
+  <text x="860" y="256" text-anchor="middle" class="lbl-sm">eswl-tray</text>
+  <text x="860" y="272" text-anchor="middle" class="lbl-mut">StatusNotifierItem</text>
+  <text x="860" y="286" text-anchor="middle" class="lbl-mut">GIO / GDBus, no GTK</text>
+  <text x="860" y="300" text-anchor="middle" class="lbl-mut">enable / prefs / quit</text>
+  <text x="860" y="320" text-anchor="middle" class="lbl-mut">E / D state down,</text>
+  <text x="860" y="334" text-anchor="middle" class="lbl-mut">signals up to parent</text>
+
+  <!-- engine -> children pipes -->
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="700" y1="284" x2="760" y2="164" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="700" y1="300" x2="760" y2="294" class="ln"/>
+
+  <!-- injection connector -->
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="587" y1="352" x2="587" y2="404" class="ln"/>
+  <rect x="474" y="408" width="226" height="40" class="sys" rx="6"/>
+  <text x="587" y="427" text-anchor="middle" class="lbl-mut">/dev/uinput</text>
+  <text x="587" y="440" text-anchor="middle" class="lbl-mut">synthetic keys / buttons / scroll</text>
+
+  <!-- config plane boundary -->
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="20" y1="486" x2="980" y2="486" class="bound"/>
+  <text x="500" y="481" text-anchor="middle" class="lbl-yel">configuration plane  --  no live IPC socket; files + signals</text>
+
+  <!-- config GUI -->
+  <rect x="20" y="502" width="460" height="200" class="layer-c" rx="6"/>
+  <text x="40" y="522" class="lbl-pur">eswl-config  --  GTK4 + libadwaita GUI</text>
+  <text x="40" y="536" class="lbl-mut">Actions table, recorder, paginated Preferences, History</text>
+  <rect x="40"  y="548" width="200" height="60" class="box" rx="6"/>
+  <text x="140" y="572" text-anchor="middle" class="lbl-sm">edit gestures</text>
+  <text x="140" y="588" text-anchor="middle" class="lbl-mut">record strokes, set actions</text>
+  <rect x="252" y="548" width="208" height="60" class="box" rx="6"/>
+  <text x="356" y="572" text-anchor="middle" class="lbl-sm">tune preferences</text>
+  <text x="356" y="588" text-anchor="middle" class="lbl-mut">trail, triggers, threshold</text>
+  <rect x="40"  y="624" width="420" height="60" class="box" rx="6"/>
+  <text x="250" y="648" text-anchor="middle" class="lbl-sm">spawns the daemon for --record / --capture-trigger</text>
+  <text x="250" y="664" text-anchor="middle" class="lbl-mut">installs the systemd --user autostart service on toggle</text>
+
+  <!-- shared files -->
+  <rect x="520" y="502" width="460" height="200" class="layer-e" rx="6"/>
+  <text x="540" y="522" class="lbl-blu">shared state  --  ~/.config/easystroke-wayland/</text>
+  <text x="540" y="536" class="lbl-mut">the only thing the GUI and daemon both touch</text>
+  <rect x="540" y="548" width="420" height="50" class="sys" rx="6"/>
+  <text x="750" y="568" text-anchor="middle" class="lbl-sm">gestures.json</text>
+  <text x="750" y="583" text-anchor="middle" class="lbl-mut">gestures, actions, trigger, all settings</text>
+  <rect x="540" y="608" width="420" height="44" class="sys" rx="6"/>
+  <text x="750" y="628" text-anchor="middle" class="lbl-sm">history.jsonl</text>
+  <text x="750" y="643" text-anchor="middle" class="lbl-mut">one recognition result per line (read by History)</text>
+  <rect x="540" y="662" width="420" height="34" class="box-hot" rx="6"/>
+  <text x="750" y="683" text-anchor="middle" class="lbl-yel">GUI writes -> SIGHUP -> daemon reloads (no restart)</text>
+
+  <!-- GUI -> files -->
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="480" y1="574" x2="540" y2="574" class="ln-p"/>
+</svg>
+</div>
+
+
+<h2 id="2-process-model">2. Process model</h2>
+
+<p>WeazyStroke is four small binaries, not one monolith. Only the daemon ever captures or injects input; the others render, edit, or sit in the tray.</p>
+
+<table>
+<thead>
+<tr>
+<th> Binary </th>
+<th> Role </th>
+<th> Links </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>eswl-daemon</code> </td>
+<td> The input engine: capture, recognition, action dispatch, injection. The hub. </td>
+<td> <code>eswl_core</code> (libinput, libevdev, xkbcommon) </td>
+</tr>
+<tr>
+<td> <code>eswl-overlay</code> </td>
+<td> The live stroke-trail renderer: a click-through layer-shell window. </td>
+<td> GTK4 + <code>gtk4-layer-shell</code> </td>
+</tr>
+<tr>
+<td> <code>eswl-config</code> </td>
+<td> The configuration GUI: edit gestures, record strokes, tune preferences. </td>
+<td> GTK4 + libadwaita </td>
+</tr>
+<tr>
+<td> <code>eswl-tray</code> </td>
+<td> The system-tray icon: enable/disable, open preferences, quit. </td>
+<td> GIO / GDBus only (no GTK) </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The daemon is deliberately the only privileged-ish component (it needs device access), and it owns the overlay and tray as <strong>child processes</strong>. It forks them, wires a pipe to each one&rsquo;s stdin, and streams a tiny line-based protocol down that pipe. Keeping them in separate processes means the engine links no GUI toolkit at all, and a crash in the trail renderer or the tray can never take down input capture.</p>
+
+<p>The GUI is <strong>not</strong> a child of the daemon and there is no live socket between them. They coordinate entirely through two shared files and two signals: the GUI writes <code>gestures.json</code>, then raises <code>SIGHUP</code> so the daemon reloads; the GUI&rsquo;s pause control raises <code>SIGUSR1</code> to toggle the daemon&rsquo;s enabled state. The daemon appends each recognition outcome to <code>history.jsonl</code>, which the GUI&rsquo;s History tab reads back. This file-plus-signal coupling is intentional — it keeps the editor and the engine independent, restartable, and debuggable in isolation.</p>
+
+<h3 id="communication-channels-at-a-glance">Communication channels at a glance</h3>
+
+<table>
+<thead>
+<tr>
+<th> From </th>
+<th> To </th>
+<th> Mechanism </th>
+<th> Carries </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> daemon </td>
+<td> overlay </td>
+<td> pipe (line protocol) </td>
+<td> begin/point/end, colours, width, pressure, cue, OSD </td>
+</tr>
+<tr>
+<td> daemon </td>
+<td> tray </td>
+<td> pipe (<code>E</code>/<code>D</code> lines) </td>
+<td> current enabled state </td>
+</tr>
+<tr>
+<td> tray </td>
+<td> daemon </td>
+<td> signals to the parent PID </td>
+<td> toggle / open prefs / quit </td>
+</tr>
+<tr>
+<td> GUI </td>
+<td> daemon </td>
+<td> <code>SIGHUP</code> / <code>SIGUSR1</code> </td>
+<td> &ldquo;reload config&rdquo; / &ldquo;toggle enable&rdquo; </td>
+</tr>
+<tr>
+<td> GUI </td>
+<td> daemon </td>
+<td> <code>gestures.json</code> (file) </td>
+<td> the entire configuration </td>
+</tr>
+<tr>
+<td> daemon </td>
+<td> GUI </td>
+<td> <code>history.jsonl</code> (file) </td>
+<td> recognition log for the History tab </td>
+</tr>
+</tbody>
+</table>
+
+
+<h2 id="3-the-gesture-pipeline">3. The gesture pipeline</h2>
+
+<p>Inside the daemon, every stroke follows the same path regardless of which device drew it. The seam between each stage is a narrow C++ interface, so a stage can be swapped without touching its neighbours.</p>
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 980 250" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg   { fill: #1a1b26; }
+    .box  { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .boxh { fill: #2a2438; stroke: #e0af68; stroke-width: 1.5; }
+    .lbl  { fill: #c0caf5; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+    .lbls { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut  { fill: #a9b1d6; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .cy   { fill: #7dcfff; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .ln   { stroke: #7dcfff; stroke-width: 1.5; fill: none; }
+    .ttl  { fill: #7aa2f7; font-size: 13px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+  </style>
+  <rect x="0" y="0" width="980" height="250" class="bg" rx="6"/>
+  <text x="490" y="24" text-anchor="middle" class="ttl">one stroke, end to end</text>
+
+  <rect x="14"  y="48" width="150" height="80" class="box" rx="6"/>
+  <text x="89"  y="74" text-anchor="middle" class="lbls">InputSource</text>
+  <text x="89"  y="92" text-anchor="middle" class="lbl-mut">device event -></text>
+  <text x="89"  y="105" text-anchor="middle" class="lbl-mut">Sample</text>
+  <text x="89"  y="118" text-anchor="middle" class="lbl-mut">(x,y,t,pressure)</text>
+
+  <rect x="190" y="48" width="160" height="80" class="box" rx="6"/>
+  <text x="270" y="74" text-anchor="middle" class="lbls">InputSink gate</text>
+  <text x="270" y="92" text-anchor="middle" class="lbl-mut">trigger held?</text>
+  <text x="270" y="105" text-anchor="middle" class="lbl-mut">accumulate path,</text>
+  <text x="270" y="118" text-anchor="middle" class="lbl-mut">track max travel</text>
+
+  <rect x="376" y="48" width="160" height="80" class="boxh" rx="6"/>
+  <text x="456" y="74" text-anchor="middle" class="lbls">recognize</text>
+  <text x="456" y="92" text-anchor="middle" class="lbl-mut">normalize (stroke.c)</text>
+  <text x="456" y="105" text-anchor="middle" class="lbl-mut">compare vs templates</text>
+  <text x="456" y="118" text-anchor="middle" class="lbl-mut">best score vs floor</text>
+
+  <rect x="562" y="48" width="160" height="80" class="box" rx="6"/>
+  <text x="642" y="74" text-anchor="middle" class="lbls">dispatch</text>
+  <text x="642" y="92" text-anchor="middle" class="lbl-mut">find binding,</text>
+  <text x="642" y="105" text-anchor="middle" class="lbl-mut">run its action</text>
+  <text x="642" y="118" text-anchor="middle" class="lbl-mut">(unless disabled)</text>
+
+  <rect x="748" y="48" width="218" height="80" class="box" rx="6"/>
+  <text x="857" y="74" text-anchor="middle" class="lbls">effect</text>
+  <text x="857" y="92" text-anchor="middle" class="lbl-mut">uinput keys/buttons/scroll,</text>
+  <text x="857" y="105" text-anchor="middle" class="lbl-mut">fork a command, or no-op</text>
+  <text x="857" y="118" text-anchor="middle" class="lbl-mut">(report to history.jsonl)</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="164" y1="88" x2="190" y2="88" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="350" y1="88" x2="376" y2="88" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="536" y1="88" x2="562" y2="88" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="722" y1="88" x2="748" y2="88" class="ln"/>
+
+  <!-- overlay tap -->
+  <rect x="190" y="166" width="346" height="56" class="box" rx="6"/>
+  <text x="363" y="188" text-anchor="middle" class="cy">live: each accumulated point is also streamed to eswl-overlay</text>
+  <text x="363" y="205" text-anchor="middle" class="lbl-mut">begin on press, point on motion, end on release -> the trail you see</text>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="270" y1="128" x2="270" y2="166" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="456" y1="128" x2="456" y2="166" class="ln"/>
+</svg>
+</div>
+
+
+<p>The stages, and the documents that go deep on each:</p>
+
+<ol>
+<li><strong>Capture.</strong> An <code>InputSource</code> reads the platform and emits normalized <code>Sample</code>s (<code>x, y, t</code>, plus pen pressure) to an <code>InputSink</code>. Three sources exist; see <a href="input-pipeline.gen.html">Input Capture &amp; Triggers</a>.</li>
+<li><strong>Gate &amp; accumulate.</strong> The <code>GestureRecognizer</code> (an <code>InputSink</code>) decides whether the trigger is held — via the trigger gate (button/pen) or the touch gate (two-finger) — and accumulates the path, tracking maximum travel so a mere click is rejected.</li>
+<li><strong>Recognize.</strong> On release the path is normalized and compared against every recorded template by the recycled <code>stroke.c</code> core; the best score is taken and tested against the threshold. See <a href="recognition.gen.html">Gesture Recognition</a>.</li>
+<li><strong>Dispatch.</strong> The winning binding&rsquo;s action runs — unless the global enable toggle is off. See <a href="actions.gen.html">Actions &amp; Injection</a>.</li>
+<li><strong>Effect.</strong> The action reaches the system through the <code>UinputInjector</code>, a forked shell command, or nothing (<code>ignore</code>). Meanwhile every point was streamed live to the <a href="overlay.gen.html">trail overlay</a>.</li>
+</ol>
+
+
+<h2 id="4-permission-model">4. Permission model</h2>
+
+<p>WeazyStroke never needs to run as root, but it does need two kernel interfaces that are not world-accessible by default.</p>
+
+<table>
+<thead>
+<tr>
+<th> Capability </th>
+<th> Why </th>
+<th> How it is granted </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> read <code>/dev/input/event*</code> </td>
+<td> capture pointer / pen / touch events </td>
+<td> <code>input</code> group + the shipped udev rule (<code>MODE=0640</code>) </td>
+</tr>
+<tr>
+<td> read-write <code>/dev/uinput</code> </td>
+<td> inject keys, buttons, scroll </td>
+<td> <code>input</code> group + udev rule (<code>MODE=0660</code>, static node) </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The daemon opens devices through <code>libinput</code>&rsquo;s udev backend (monitor mode) or directly via <code>libevdev</code> (grab mode), and creates one virtual output device through <code>/dev/uinput</code>. Capture in the default mode is <em>monitor-only</em>: the compositor still sees every event, so the trigger button also performs its normal action. The optional <code>--grab</code> mode opens mice with <code>EVIOCGRAB</code>, withholds the trigger, and replays it as a real click only if the motion was too small to be a gesture — the faithful Wayland equivalent of X11&rsquo;s passive button grab. The keyboard is never grabbed, so <code>Ctrl-C</code> always works and the kernel drops every grab when the process exits.</p>
+
+<p>A single-instance <code>flock</code> on <code>$XDG_RUNTIME_DIR/weazystroke.lock</code> guarantees only one daemon runs; a second would double every injected action. The included systemd unit hardens the service further (<code>NoNewPrivileges</code>, <code>ProtectSystem=strict</code>, scoped <code>DeviceAllow</code>). See <a href="install.gen.html">Build, Install &amp; Packaging</a>.</p>
+
+<h2 id="5-source-layout">5. Source layout</h2>
+
+<p>Everything is under <code>src/</code>, with the engine sources compiled into a single static library and four thin <code>main</code> entrypoints on top.</p>
+
+<table>
+<thead>
+<tr>
+<th> Path </th>
+<th> Purpose </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>src/stroke.{c,h}</code> </td>
+<td> Recognition core, recycled verbatim from easystroke (pure C, no deps) </td>
+</tr>
+<tr>
+<td> <code>src/gesture.{cc,h}</code> </td>
+<td> C++ wrapper over <code>stroke.c</code>: normalize, compare, score </td>
+</tr>
+<tr>
+<td> <code>src/gesture_recognizer.{cc,h}</code> </td>
+<td> The stroke state machine: gates, accumulation, matching, dispatch </td>
+</tr>
+<tr>
+<td> <code>src/*_source.{cc,h}</code> </td>
+<td> Input sources: <code>libinput</code>, grab-mode <code>evdev</code>, raw touch <code>evdev</code> </td>
+</tr>
+<tr>
+<td> <code>src/uinput_injector.{cc,h}</code>, <code>keymap.{cc,h}</code>, <code>button_map.{cc,h}</code> </td>
+<td> Injection, key resolution, button numbering </td>
+</tr>
+<tr>
+<td> <code>src/gesture_config.{cc,h}</code>, <code>json.{cc,h}</code> </td>
+<td> Config model and a self-contained JSON parser/serializer </td>
+</tr>
+<tr>
+<td> <code>src/process*.{cc,h}</code> </td>
+<td> Subprocess helpers: <code>run_command</code>, overlay supervisor, tray supervisor </td>
+</tr>
+<tr>
+<td> <code>src/main.cc</code> </td>
+<td> <code>eswl-daemon</code> </td>
+</tr>
+<tr>
+<td> <code>src/overlay_main.cc</code> </td>
+<td> <code>eswl-overlay</code> </td>
+</tr>
+<tr>
+<td> <code>src/eswl_config_main.cc</code> </td>
+<td> <code>eswl-config</code> </td>
+</tr>
+<tr>
+<td> <code>src/eswl_tray_main.cc</code> </td>
+<td> <code>eswl-tray</code> </td>
+</tr>
+<tr>
+<td> <code>src/*_gate.h</code>, <code>trace_overlay.h</code>, <code>input_*.h</code> </td>
+<td> Interface headers (pure-logic gates, abstractions, event types) </td>
+</tr>
+<tr>
+<td> <code>tests/</code> </td>
+<td> Unit tests for recognition, config, JSON, keymap, and the gates </td>
+</tr>
+</tbody>
+</table>
+
+
+<h2 id="6-the-core-library">6. The core library</h2>
+
+<p><code>eswl_core</code> is the static library that makes the four-binary split possible. It bundles the recognition core, all input sources, the injector, the keymap, the config layer, and the process supervisors — and deliberately links <strong>nothing</strong> but libc/libstdc++, <code>libinput</code>/<code>libudev</code>/<code>libevdev</code>, and <code>xkbcommon</code>. No Boost, no GTK, no X11.</p>
+
+<p>This is why the daemon stays toolkit-free while still driving a GTK trail: it talks to the renderer through the abstract <code>TraceOverlay</code> interface, whose only implementation here (<code>ProcessOverlay</code>) is a fork+exec of the GTK binary plus a pipe. The GUI process reuses just two of the core&rsquo;s source files directly (<code>gesture_config.cc</code>, <code>json.cc</code>) so the editor and the engine read and write byte-identical config — it does not link the sanitized <code>eswl_core</code> itself, avoiding a sanitizer/toolkit mismatch. The same library backs every unit test, so the gate logic, recognition, and config round-tripping are all verified headlessly. See <a href="configuration.gen.html">Configuration &amp; Process Model</a>.</p>
+
+<h2 id="7-design-rules">7. Design rules</h2>
+
+<p>A handful of rules keep the system coherent. They are why the four-process split pays for itself.</p>
+
+<ul>
+<li><strong>The engine links no GUI toolkit.</strong> Rendering lives in separate processes reached through a line protocol behind the <code>TraceOverlay</code> abstraction.</li>
+<li><strong>The recognition core is recycled untouched.</strong> <code>stroke.c</code> is compiled as-is from easystroke; the Wayland project wraps it, it does not fork it.</li>
+<li><strong>Process isolation is a safety boundary.</strong> An overlay or tray crash must never interrupt input capture; the daemon respawns the overlay on demand and ignores <code>SIGPIPE</code>.</li>
+<li><strong>Config is a file, application is live.</strong> All state lives in human-editable JSON; saving raises <code>SIGHUP</code> and the running daemon rebuilds its bindings with no restart.</li>
+<li><strong>One engine, every device.</strong> Mouse, pen, stylus chord, and two-finger touch all feed the same recognizer through the same <code>Sample</code> type.</li>
+<li><strong>Never run as root.</strong> Device and uinput access come from the <code>input</code> group and a udev rule; a <code>flock</code> enforces a single instance.</li>
+</ul>
+
+
+<h2 id="8-document-index">8. Document index</h2>
+
+<table>
+<thead>
+<tr>
+<th> Document </th>
+<th> Covers </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <a href="recognition.gen.html">Gesture Recognition</a> </td>
+<td> The <code>stroke.c</code> algorithm, normalization, the DP matcher, scoring, multi-example templates </td>
+</tr>
+<tr>
+<td> <a href="input-pipeline.gen.html">Input Capture &amp; Triggers</a> </td>
+<td> The three sources, device classes, and the trigger / touch gate state machines </td>
+</tr>
+<tr>
+<td> <a href="actions.gen.html">Actions &amp; Injection</a> </td>
+<td> The typed action model, <code>uinput</code> injection, the <code>xkbcommon</code> keymap, button mapping </td>
+</tr>
+<tr>
+<td> <a href="overlay.gen.html">Stroke-Trail Overlay</a> </td>
+<td> The overlay process, its line protocol, Cairo effects, pressure, the cue, and self-healing </td>
+</tr>
+<tr>
+<td> <a href="config-gui.gen.html">Config GUI &amp; Tray</a> </td>
+<td> The GTK4/libadwaita app, the Actions table, the recorder, Preferences, and the tray </td>
+</tr>
+<tr>
+<td> <a href="configuration.gen.html">Configuration &amp; Process Model</a> </td>
+<td> The JSON schema, live reload, the singleton lock, and subprocess supervision </td>
+</tr>
+<tr>
+<td> <a href="install.gen.html">Build, Install &amp; Packaging</a> </td>
+<td> CMake targets, dependencies, sanitizers, the udev rule, autostart, and packaging </td>
+</tr>
+</tbody>
+</table>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("pre code").forEach(function (block) {
+    hljs.highlightElement(block);
+  });
+});
+</script>
+</body></html>

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke -- Stroke-Trail Overlay</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  .page-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(36, 40, 59, 0.9);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .page-nav a:hover {
+    background: var(--surface);
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  h4 { color: var(--cyan); font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0.75rem 0 1rem; font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.75rem; text-align: left;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  td { background: var(--bg); }
+  code {
+    background: var(--surface); padding: 0.15rem 0.4rem;
+    border-radius: 3px; font-size: 0.82rem; color: var(--cyan);
+  }
+  pre {
+    background: var(--surface); padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0.75rem 0 1rem;
+    border: 1px solid var(--border);
+  }
+  pre code {
+    display: block; background: transparent; padding: 0;
+    font-size: 0.8rem; color: inherit;
+  }
+  pre code.hljs,
+  code.hljs {
+    background: transparent;
+    padding: 0;
+  }
+  blockquote {
+    background: var(--surface); border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;
+    font-size: 0.82rem;
+  }
+  blockquote strong { color: var(--yellow); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  strong { color: var(--fg); }
+  em { color: var(--muted); font-style: italic; }
+  .diagram-container {
+    display: flex; justify-content: center;
+    margin: 1.25rem auto 1.5rem; padding: 0.75rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    margin: 0 auto;
+    flex: 0 0 auto;
+  }
+  figure.screenshot {
+    margin: 1.25rem auto 1.5rem;
+    padding: 0.6rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.screenshot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.screenshot figcaption {
+    color: var(--muted); font-size: 0.78rem;
+    text-align: center; margin-top: 0.5rem;
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+<div class="page-nav"><a href="index.html">Docs Home</a></div>
+<h1 id="weazystroke--stroke-trail-overlay">WeazyStroke &ndash; Stroke-Trail Overlay</h1>
+
+<p>This page documents the live trail: why it is a separate process, the line protocol the daemon streams to it, how the renderer self-heals across compositor restarts, the Cairo drawing pipeline behind Plain/Glow/Sparkle, and the touch cue and OSD.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#1-why-a-separate-process">Why a separate process</a></li>
+<li><a href="#2-the-line-protocol">The line protocol</a></li>
+<li><a href="#3-sticky-settings-and-self-healing">Sticky settings and self-healing</a></li>
+<li><a href="#4-the-layer-shell-window">The layer-shell window</a></li>
+<li><a href="#5-the-drawing-pipeline">The drawing pipeline</a></li>
+<li><a href="#6-effects-plain-glow-sparkle">Effects: Plain, Glow, Sparkle</a></li>
+<li><a href="#7-completion-retract">Completion retract</a></li>
+<li><a href="#8-the-touch-cue-and-the-osd">The touch cue and the OSD</a></li>
+<li><a href="#9-gnome-and-the-abstraction-seam">GNOME and the abstraction seam</a></li>
+</ol>
+
+
+<hr />
+
+<h2 id="1-why-a-separate-process">1. Why a separate process</h2>
+
+<p>The trail is drawn by <code>eswl-overlay</code>, a standalone GTK4 + <code>gtk4-layer-shell</code> binary, <em>not</em> by the daemon. This keeps the input engine free of any GUI toolkit — the engine links no GTK at all — and means a crash in the renderer can never take down input capture. The daemon talks to it through the abstract <code>TraceOverlay</code> interface, whose only implementation, <code>ProcessOverlay</code> (<code>src/process_overlay.cc</code>), is a fork+exec of the binary plus a pipe to its stdin.</p>
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 940 270" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg   { fill: #1a1b26; }
+    .boxe { fill: #1a2235; stroke: #7aa2f7; stroke-width: 1.5; }
+    .boxo { fill: #1a2a1a; stroke: #9ece6a; stroke-width: 1.5; }
+    .box  { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .lbls { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl  { fill: #c0caf5; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut  { fill: #a9b1d6; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .blu  { fill: #7aa2f7; font-size: 11px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .grn  { fill: #9ece6a; font-size: 11px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ttl  { fill: #7aa2f7; font-size: 13px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ln   { stroke: #7dcfff; stroke-width: 1.5; fill: none; }
+    .bnd  { stroke: #6b7398; stroke-width: 1.2; stroke-dasharray: 6,4; fill: none; }
+  </style>
+  <rect x="0" y="0" width="940" height="270" class="bg" rx="6"/>
+  <text x="470" y="24" text-anchor="middle" class="ttl">daemon -> overlay: one pipe, a line protocol</text>
+
+  <rect x="30" y="50" width="350" height="180" class="boxe" rx="6"/>
+  <text x="50" y="72" class="blu">eswl-daemon</text>
+  <rect x="50" y="86" width="310" height="60" class="box" rx="6"/>
+  <text x="205" y="108" text-anchor="middle" class="lbls">GestureRecognizer</text>
+  <text x="205" y="126" text-anchor="middle" class="lbl-mut">begin / add(x,y,p) / end / cue</text>
+  <rect x="50" y="158" width="310" height="60" class="box" rx="6"/>
+  <text x="205" y="180" text-anchor="middle" class="lbls">ProcessOverlay (supervisor)</text>
+  <text x="205" y="198" text-anchor="middle" class="lbl-mut">fork+exec, sticky cache, respawn</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="380" y1="188" x2="560" y2="188" class="ln"/>
+  <text x="470" y="180" text-anchor="middle" class="lbl-mut">pipe (stdin)</text>
+  <text x="470" y="210" text-anchor="middle" class="lbl-mut">B P E W F C D A a R G M O</text>
+
+  <rect x="560" y="50" width="350" height="180" class="boxo" rx="6"/>
+  <text x="580" y="72" class="grn">eswl-overlay</text>
+  <rect x="580" y="86" width="310" height="60" class="box" rx="6"/>
+  <text x="735" y="108" text-anchor="middle" class="lbls">stdin_cb -> process_line</text>
+  <text x="735" y="126" text-anchor="middle" class="lbl-mut">parse newline-framed commands</text>
+  <rect x="580" y="158" width="310" height="60" class="box" rx="6"/>
+  <text x="735" y="180" text-anchor="middle" class="lbls">draw_cb (Cairo) on a layer-shell surface</text>
+  <text x="735" y="198" text-anchor="middle" class="lbl-mut">click-through, full-screen, transparent</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="470" y1="50" x2="470" y2="40" class="bnd"/>
+  <text x="470" y="244" text-anchor="middle" class="lbl-mut">EOF on stdin or SIGTERM exits the renderer.</text>
+  <text x="470" y="258" text-anchor="middle" class="lbl-mut">A write failure tears down the pipe; the next command respawns it.</text>
+</svg>
+</div>
+
+
+<h2 id="2-the-line-protocol">2. The line protocol</h2>
+
+<p>The daemon streams newline-framed ASCII commands down the pipe; the renderer parses them in <code>process_line</code> and redraws. The protocol is tiny and split into two classes: <strong>transient</strong> commands that describe the current stroke or cue (replayed by drawing, never re-sent), and <strong>sticky</strong> settings that configure appearance (remembered and replayed after a respawn).</p>
+
+<table>
+<thead>
+<tr>
+<th> Cmd </th>
+<th> Args </th>
+<th> Meaning </th>
+<th> Class </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>B</code> </td>
+<td> — </td>
+<td> begin a fresh stroke (clear the trail) </td>
+<td> transient </td>
+</tr>
+<tr>
+<td> <code>P</code> </td>
+<td> <code>x y p</code> </td>
+<td> append a point in screen space, pen pressure <code>p</code> (<code>&lt;0</code> = none) </td>
+<td> transient </td>
+</tr>
+<tr>
+<td> <code>E</code> </td>
+<td> — </td>
+<td> end the stroke (animate it out) </td>
+<td> transient </td>
+</tr>
+<tr>
+<td> <code>A</code> </td>
+<td> <code>x y</code> </td>
+<td> show / move the touch &ldquo;armed&rdquo; ring at a point </td>
+<td> transient </td>
+</tr>
+<tr>
+<td> <code>a</code> </td>
+<td> — </td>
+<td> hide the armed ring (shrink + fade) </td>
+<td> transient </td>
+</tr>
+<tr>
+<td> <code>O</code> </td>
+<td> <code>name</code> </td>
+<td> flash a matched-gesture name (OSD) </td>
+<td> transient </td>
+</tr>
+<tr>
+<td> <code>W</code> </td>
+<td> <code>px</code> </td>
+<td> trail line width (the pressure-off width) </td>
+<td> sticky </td>
+</tr>
+<tr>
+<td> <code>F</code> </td>
+<td> <code>id</code> </td>
+<td> effect: <code>0</code> plain, <code>1</code> glow, <code>2</code> sparkle </td>
+<td> sticky </td>
+</tr>
+<tr>
+<td> <code>C</code> </td>
+<td> <code>r0 g0 b0 r1 g1 b1</code> </td>
+<td> gradient endpoints (start → end, <code>0..1</code>) </td>
+<td> sticky </td>
+</tr>
+<tr>
+<td> <code>D</code> </td>
+<td> <code>ms</code> </td>
+<td> completion fade-out duration </td>
+<td> sticky </td>
+</tr>
+<tr>
+<td> <code>R</code> </td>
+<td> <code>px</code> </td>
+<td> armed-ring radius </td>
+<td> sticky </td>
+</tr>
+<tr>
+<td> <code>G</code> </td>
+<td> <code>grow out</code> </td>
+<td> armed-ring grow-out and shrink/fade durations (ms) </td>
+<td> sticky </td>
+</tr>
+<tr>
+<td> <code>M</code> </td>
+<td> <code>on min max</code> </td>
+<td> pen pressure → width: enabled, min px, max px </td>
+<td> sticky </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Points arrive in the daemon&rsquo;s screen-pixel space (set by <code>--screen WxH</code>); the renderer scales them to the real output size on every frame, so the daemon never needs to know the actual resolution. The recognizer emits <code>B</code> on trigger press, a <code>P</code> per motion sample (with the pen&rsquo;s pressure riding along), and <code>E</code> on release — the same accumulation that feeds recognition also feeds the trail.</p>
+
+<h2 id="3-sticky-settings-and-self-healing">3. Sticky settings and self-healing</h2>
+
+<p><code>ProcessOverlay</code> keeps a map of the latest value of each sticky command, keyed by its command letter (<code>W F C D R G M</code>). Every appearance setter (<code>set_width</code>, <code>set_effect</code>, <code>set_colors</code>, …) records its line in that cache <em>and</em> sends it, via <code>send_sticky</code>. Transient stroke/cue commands are sent directly and never cached.</p>
+
+<p>That cache is what makes the renderer <strong>self-healing</strong>. A compositor restart drops the overlay&rsquo;s Wayland connection, which surfaces as a write failure on the daemon&rsquo;s pipe. The flow:</p>
+
+<ol>
+<li>The daemon ignores <code>SIGPIPE</code> process-wide, so a dead reader never kills it.</li>
+<li><code>raw_write</code> sees <code>fputs</code> fail, closes the pipe, and forgets the child (<code>drop_pipe</code>).</li>
+<li>The next command calls <code>send</code>, which notices there is no pipe and calls <code>ensure_child</code>: re-fork the renderer, then <code>replay_config</code> — resend every sticky setting so the new renderer matches the daemon&rsquo;s current state.</li>
+<li><code>send</code> then performs one respawn-and-resend of the failed command itself, so it is not silently lost.</li>
+</ol>
+
+
+<p>Without this, a single KWin restart would silently kill the trail until the whole daemon was restarted. With it, the trail simply reappears on the next stroke. On clean shutdown the supervisor closes the pipe (EOF makes the renderer exit its main loop) and <code>SIGTERM</code>s the child for good measure.</p>
+
+<h2 id="4-the-layer-shell-window">4. The layer-shell window</h2>
+
+<p><code>eswl-overlay</code> (<code>src/overlay_main.cc</code>) creates a single full-screen window via <code>gtk4-layer-shell</code>, configured to sit above everything and intercept nothing:</p>
+
+<table>
+<thead>
+<tr>
+<th> Property </th>
+<th> Value </th>
+<th> Why </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> layer </td>
+<td> <code>GTK_LAYER_SHELL_LAYER_OVERLAY</code> </td>
+<td> above normal windows </td>
+</tr>
+<tr>
+<td> anchors </td>
+<td> all four edges </td>
+<td> spans the whole output </td>
+</tr>
+<tr>
+<td> exclusive zone </td>
+<td> <code>-1</code> </td>
+<td> never reserves space / shifts other windows </td>
+</tr>
+<tr>
+<td> keyboard mode </td>
+<td> <code>NONE</code> </td>
+<td> never takes keyboard focus </td>
+</tr>
+<tr>
+<td> namespace </td>
+<td> <code>easystroke-trail</code> </td>
+<td> identifiable to the compositor </td>
+</tr>
+<tr>
+<td> input region </td>
+<td> empty (<code>on realize</code>) </td>
+<td> <strong>click-through</strong>: the compositor routes all pointer/pen input to whatever is underneath </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The window and drawing area are styled transparent via a CSS provider, so only the trail itself is visible. stdin is set non-blocking and watched with <code>g_unix_fd_add</code>; partial reads are buffered and split on newlines, so commands are processed as whole lines regardless of how the pipe chunks them. <code>SIGTERM</code>/<code>SIGINT</code> and stdin <code>EOF</code>/<code>HUP</code> all quit the GLib main loop.</p>
+
+<h2 id="5-the-drawing-pipeline">5. The drawing pipeline</h2>
+
+<p><code>draw_cb</code> redraws the whole surface each frame. It starts from a fully transparent clear, then renders the trail as a smooth, gradient-coloured, variable-width curve:</p>
+
+<ul>
+<li><strong>Smoothing.</strong> Raw samples are joined with Catmull-Rom cubic curves (control points derived from each point&rsquo;s neighbours), so the trail flows instead of faceting between samples.</li>
+<li><strong>Per-segment width.</strong> With pen pressure present (<code>M</code> enabled and a pressure value on the sample), each segment&rsquo;s width interpolates between <code>pressure_min</code> and <code>pressure_max</code> by the average pressure of its endpoints; otherwise it uses the constant <code>W</code> width. Mouse and touch (negative pressure) always use the constant width.</li>
+<li><strong>Onset taper.</strong> Over the first few points the width ramps up from a hairline (a smoothstep envelope, floored at a visible <code>0.3</code> px), so every stroke eases in cleanly instead of popping to full width.</li>
+<li><strong>Direction gradient.</strong> The colour eases from the start colour to the end colour along the stroke (<code>t = i/(n-1)</code>), defaulting to easystroke&rsquo;s blue→green direction cue. The <code>C</code> command sets both endpoints.</li>
+</ul>
+
+
+<p>All of this is recomputed per frame from the point buffer, so a live stroke grows smoothly and a completing stroke can be re-parameterized (below) without rebuilding any geometry.</p>
+
+<h2 id="6-effects-plain-glow-sparkle">6. Effects: Plain, Glow, Sparkle</h2>
+
+<p>The <code>F</code> command selects one of three styles, all built from the same curve:</p>
+
+<table>
+<thead>
+<tr>
+<th> Effect </th>
+<th> <code>id</code> </th>
+<th> Rendering </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <strong>Plain</strong> </td>
+<td> <code>0</code> </td>
+<td> a single gradient line — easystroke&rsquo;s classic look </td>
+</tr>
+<tr>
+<td> <strong>Glow</strong> </td>
+<td> <code>1</code> </td>
+<td> two wide, faint underlay passes (<code>×4.6</code> and <code>×2.4</code> width at low alpha) beneath the line, for a soft bloom </td>
+</tr>
+<tr>
+<td> <strong>Sparkle</strong> </td>
+<td> <code>2</code> </td>
+<td> the line plus sparse hard-edged square &ldquo;pixels&rdquo; (white / end-colour), antialiasing off, hashed on point index so they are deterministic and sparse </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Glow draws back-to-front (widest, faintest first) so the crisp line lands on top. Sparkle&rsquo;s squares step down in discrete sizes and thin out toward the tail (older points), giving an 8-bit shimmer that decays along the trail.</p>
+
+<h2 id="7-completion-retract">7. Completion retract</h2>
+
+<p>When a stroke ends (<code>E</code>), the trail does not blank — it animates away. The default is a <em>retract</em>: the line un-draws itself, its start point advancing toward the end over the fade so the trail appears to be reeled in. The animation is driven by a GTK tick callback (<code>fade_cb</code>) over <code>fade_ms</code> (the <code>D</code> setting; <code>0</code> clears instantly).</p>
+
+<p>The retract front is a <strong>fractional</strong> position along the curve, not an integer point index, so it glides continuously instead of snapping point-to-point (which read as blocky on short strokes). At the front segment the cubic is split at the fractional position with de Casteljau&rsquo;s algorithm and only the remaining part is drawn. Sparkle handles completion by shrinking its squares to nothing as the transition ends. When the animation finishes the point buffers are cleared and the surface goes fully transparent again.</p>
+
+<h2 id="8-the-touch-cue-and-the-osd">8. The touch cue and the OSD</h2>
+
+<p>Two more transient overlays share the same surface.</p>
+
+<p><strong>Armed ring (touch cue).</strong> While a two-finger touch gesture is armed, the daemon sends <code>A x y</code> to show an expanding ring at the held anchor finger, re-sending it as the finger drags so the ring follows. The ring grows out over <code>anchor_grow_ms</code>, holds as a halo under the fingertip, and on <code>a</code> (anchor lifted) shrinks and fades over <code>anchor_out_ms</code> from exactly whatever was on screen. Its colour follows the trail&rsquo;s start→end gradient, but alpha fades in fast and the green turn is delayed, so the blue start is actually visible and it flashes blue again on the way out. Radius and timing come from <code>R</code> and <code>G</code>. Under the Sparkle effect the ring is drawn as hard squares dotted around the circumference instead of a smooth arc.</p>
+
+<p><strong>OSD.</strong> The <code>O name</code> command flashes the matched gesture&rsquo;s name in a small rounded pill near the bottom-centre of the screen, auto-clearing after <code>1.1s</code>. The daemon sends it only on a match and only when the OSD setting is enabled. Newlines are stripped so a name always stays one command line.</p>
+
+<h2 id="9-gnome-and-the-abstraction-seam">9. GNOME and the abstraction seam</h2>
+
+<p>The trail is the <em>only</em> compositor-dependent part of WeazyStroke. <code>wlr-layer-shell</code> (via <code>gtk4-layer-shell</code>) is implemented by KDE/KWin and wlroots-based compositors, but <strong>not</strong> by GNOME&rsquo;s Mutter, and a normal Wayland window cannot be a click-through, always-on-top overlay. So on GNOME the engine, GUI, and actions all work — only the on-screen trail does not appear.</p>
+
+<p>The fix is structural, not yet built: because the daemon already talks to the renderer behind the <code>TraceOverlay</code> abstraction over a swappable process + line-protocol interface, a GNOME backend that renders on the Shell stage (a Shell extension fed over DBus) would slot in with no engine changes. It is flagged as a future / community contribution. See the <a href="architecture.gen.html">Architecture Overview</a> for where the overlay sits among the four processes, and <a href="configuration.gen.html">Configuration &amp; Process Model</a> for how <code>ProcessOverlay</code> is supervised alongside the tray.</p>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("pre code").forEach(function (block) {
+    hljs.highlightElement(block);
+  });
+});
+</script>
+</body></html>

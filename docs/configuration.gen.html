@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke -- Configuration & Process Model</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  .page-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(36, 40, 59, 0.9);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .page-nav a:hover {
+    background: var(--surface);
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  h4 { color: var(--cyan); font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0.75rem 0 1rem; font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.75rem; text-align: left;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  td { background: var(--bg); }
+  code {
+    background: var(--surface); padding: 0.15rem 0.4rem;
+    border-radius: 3px; font-size: 0.82rem; color: var(--cyan);
+  }
+  pre {
+    background: var(--surface); padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0.75rem 0 1rem;
+    border: 1px solid var(--border);
+  }
+  pre code {
+    display: block; background: transparent; padding: 0;
+    font-size: 0.8rem; color: inherit;
+  }
+  pre code.hljs,
+  code.hljs {
+    background: transparent;
+    padding: 0;
+  }
+  blockquote {
+    background: var(--surface); border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;
+    font-size: 0.82rem;
+  }
+  blockquote strong { color: var(--yellow); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  strong { color: var(--fg); }
+  em { color: var(--muted); font-style: italic; }
+  .diagram-container {
+    display: flex; justify-content: center;
+    margin: 1.25rem auto 1.5rem; padding: 0.75rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    margin: 0 auto;
+    flex: 0 0 auto;
+  }
+  figure.screenshot {
+    margin: 1.25rem auto 1.5rem;
+    padding: 0.6rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.screenshot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.screenshot figcaption {
+    color: var(--muted); font-size: 0.78rem;
+    text-align: center; margin-top: 0.5rem;
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+<div class="page-nav"><a href="index.html">Docs Home</a></div>
+<h1 id="weazystroke--configuration--process-model">WeazyStroke &ndash; Configuration &amp; Process Model</h1>
+
+<p>This page documents the on-disk configuration: the self-contained JSON format and its schema, the legacy formats it still reads, how a save becomes a live reload, the daemon&rsquo;s signals and singleton lock, and how it supervises the overlay and tray as child processes.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#1-one-file-hand-editable-json">One file, hand-editable JSON</a></li>
+<li><a href="#2-the-schema">The schema</a></li>
+<li><a href="#3-backward-compatibility">Backward compatibility</a></li>
+<li><a href="#4-the-json-implementation">The JSON implementation</a></li>
+<li><a href="#5-live-reload">Live reload</a></li>
+<li><a href="#6-signals-and-the-singleton-lock">Signals and the singleton lock</a></li>
+<li><a href="#7-process-supervision">Process supervision</a></li>
+<li><a href="#8-daemon-command-line">Daemon command line</a></li>
+</ol>
+
+
+<hr />
+
+<h2 id="1-one-file-hand-editable-json">1. One file, hand-editable JSON</h2>
+
+<p>All persistent state lives in a single human-readable JSON file:</p>
+
+<pre><code class="code-block">
+~/.config/easystroke-wayland/gestures.json     (honours $XDG_CONFIG_HOME)
+</code></pre>
+
+
+<p><code>GestureConfig::default_path()</code> derives it from <code>XDG_CONFIG_HOME</code> (or <code>~/.config</code>). Everything the daemon needs is here — the trigger, the touch settings, the recognition and feedback knobs, and the gestures themselves with their recorded strokes and actions. The GUI reads and writes the same file; there is no separate database and no daemon-only hidden state. The design rule is that policy is a file you can read, diff, and edit by hand, and the daemon applies it live.</p>
+
+<p>Two sibling files share the directory but are not part of the config proper: <code>gui.json</code> (the GUI&rsquo;s own appearance settings) and <code>history.jsonl</code> (the recognition log the daemon appends and the History tab reads).</p>
+
+<h2 id="2-the-schema">2. The schema</h2>
+
+<p>The file is one object: a few top-level trigger fields, a nested <code>settings</code> object for the tunables, and a <code>gestures</code> array. Saving always writes the full, current schema.</p>
+
+<pre><code class="language-json code-block">
+{
+  "trigger_button": 10,
+  "mode": "stylus",
+  "trigger_modifiers": 0,
+  "gate_button": 11,
+  "touch_edge": "right",
+  "settings": {
+    "match_threshold": 0.6,
+    "trace_width": 4,
+    "pressure": true,
+    "pressure_min": 2,
+    "pressure_max": 14,
+    "touch_pressure": true,
+    "touch_pressure_floor": 150,
+    "touch_pressure_ref": 500,
+    "scroll_speed": 1.0,
+    "scroll_invert": false,
+    "show_osd": false,
+    "trail_effect": "plain",
+    "trail_fade_ms": 380,
+    "trail_color_start": "#0000ff",
+    "trail_color_end": "#00ff00",
+    "touch_band": 30,
+    "touch_cue": true,
+    "touch_ring": 90,
+    "touch_grow_ms": 450,
+    "touch_out_ms": 220
+  },
+  "gestures": [
+    {
+      "name": "open-terminal",
+      "type": "command",
+      "argument": "kitty",
+      "strokes": [
+        [[820.0, 410.0], [835.0, 451.0], [861.0, 503.0]],
+        [[818.0, 405.0], [840.0, 460.0], [869.0, 511.0]]
+      ]
+    }
+  ]
+}
+</code></pre>
+
+
+<table>
+<thead>
+<tr>
+<th> Top-level key </th>
+<th> Type </th>
+<th> Meaning </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>trigger_button</code> </td>
+<td> number </td>
+<td> logical trigger button (default <code>3</code>, right) </td>
+</tr>
+<tr>
+<td> <code>mode</code> </td>
+<td> string </td>
+<td> activation mode label: <code>stylus</code> / <code>mouse</code> / <code>multitouch</code> </td>
+</tr>
+<tr>
+<td> <code>trigger_modifiers</code> </td>
+<td> number </td>
+<td> required modifier bits for mouse mode (<code>Ctrl=1, Alt=2, Shift=4, Super=8</code>) </td>
+</tr>
+<tr>
+<td> <code>gate_button</code> </td>
+<td> number </td>
+<td> second button that must be held (chord); <code>0</code> = none </td>
+</tr>
+<tr>
+<td> <code>touch_edge</code> </td>
+<td> string </td>
+<td> anchor edge for two-finger touch (<code>none</code>/<code>left</code>/<code>right</code>/<code>top</code>/<code>bottom</code>) </td>
+</tr>
+<tr>
+<td> <code>settings</code> </td>
+<td> object </td>
+<td> the tunables (see <a href="config-gui.gen.html">Config GUI &amp; Tray</a> for the full table) </td>
+</tr>
+<tr>
+<td> <code>gestures</code> </td>
+<td> array </td>
+<td> the bound gestures </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Each gesture is <code>{ name, type, argument, strokes }</code>, where <code>strokes</code> is an <strong>array of examples</strong>, each example an array of <code>[x, y]</code> points. One gesture can carry several examples for sturdier matching (<a href="recognition.gen.html">Gesture Recognition</a>); the action is the single <code>type</code>+<code>argument</code> pair (<a href="actions.gen.html">Actions &amp; Injection</a>).</p>
+
+<h2 id="3-backward-compatibility">3. Backward compatibility</h2>
+
+<p>Loading tolerates two older shapes so existing files keep working, folding each into the current model:</p>
+
+<ul>
+<li><strong>Typed vs. fielded actions.</strong> If a gesture has no <code>type</code>, the loader looks for legacy <code>key</code> / <code>text</code> / <code>command</code> fields and folds the first present (in that priority) into <code>type</code>+<code>argument</code>.</li>
+<li><strong>Multi-stroke vs. single.</strong> The current <code>strokes</code> array (multiple examples) is preferred; if absent, a legacy single <code>points</code> array is read as one example.</li>
+</ul>
+
+
+<p>Saving always emits the current schema, so loading an old file and saving it once migrates it. Missing keys simply keep their defaults — the loader only overwrites a field when the file actually carries it, which also means a partial hand-edited file is valid.</p>
+
+<h2 id="4-the-json-implementation">4. The JSON implementation</h2>
+
+<p>The parser and serializer (<code>src/json.cc</code>, <code>src/json.h</code>) are hand-written and dependency-free — no Boost, no vendored blob. Scope is exactly what the config needs: objects, arrays, strings, numbers, bools, and null, with enough robustness to tolerate hand edits.</p>
+
+<p><code>json::Value</code> is a <code>std::variant</code> over those types, with typed accessors that throw on a mismatch and a chaining <code>operator[]</code> that returns a shared null <code>Value</code> for a missing key — so deep access like <code>root["settings"]["match_threshold"]</code> never throws on absence, it just reports &ldquo;not a number&rdquo; and the loader keeps the default. <code>dump()</code> pretty-prints with a configurable indent. The JSON layer is one of only two core files the GUI links directly (the other being <code>gesture_config.cc</code>), guaranteeing the editor and the engine read and write byte-identical files. It is unit-tested for round-trips, escapes, numbers, nesting, and malformed input (<code>tests/json_test.cc</code>).</p>
+
+<h2 id="5-live-reload">5. Live reload</h2>
+
+<p>Edits apply without a restart. The flow is file + signal, not IPC:</p>
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 920 220" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg   { fill: #1a1b26; }
+    .box  { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .boxc { fill: #2a1f35; stroke: #bb9af7; stroke-width: 1.4; }
+    .boxe { fill: #1a2235; stroke: #7aa2f7; stroke-width: 1.4; }
+    .sys  { fill: #1f2535; stroke: #565f89; stroke-width: 1; }
+    .lbls { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut  { fill: #a9b1d6; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .ttl  { fill: #7aa2f7; font-size: 13px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ln   { stroke: #7dcfff; stroke-width: 1.4; fill: none; }
+  </style>
+  <rect x="0" y="0" width="920" height="220" class="bg" rx="6"/>
+  <text x="460" y="24" text-anchor="middle" class="ttl">save -> reload, with no restart</text>
+
+  <rect x="20"  y="58" width="170" height="64" class="boxc" rx="6"/>
+  <text x="105" y="84" text-anchor="middle" class="lbls">eswl-config</text>
+  <text x="105" y="102" text-anchor="middle" class="lbl-mut">edit + Save</text>
+
+  <rect x="250" y="58" width="180" height="64" class="sys" rx="6"/>
+  <text x="340" y="84" text-anchor="middle" class="lbls">gestures.json</text>
+  <text x="340" y="102" text-anchor="middle" class="lbl-mut">full schema written</text>
+
+  <rect x="490" y="58" width="180" height="64" class="boxe" rx="6"/>
+  <text x="580" y="84" text-anchor="middle" class="lbls">eswl-daemon</text>
+  <text x="580" y="102" text-anchor="middle" class="lbl-mut">g_reload set on SIGHUP</text>
+
+  <rect x="720" y="58" width="180" height="64" class="box" rx="6"/>
+  <text x="810" y="80" text-anchor="middle" class="lbls">rebuild in place</text>
+  <text x="810" y="97" text-anchor="middle" class="lbl-mut">clear + rebuild</text>
+  <text x="810" y="111" text-anchor="middle" class="lbl-mut">bindings, re-apply</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="190" y1="90" x2="250" y2="90" class="ln"/>
+  <text x="220" y="82" text-anchor="middle" class="lbl-mut">write</text>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="430" y1="78" x2="490" y2="78" class="ln"/>
+  <text x="460" y="70" text-anchor="middle" class="lbl-mut">SIGHUP</text>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="430" y1="104" x2="490" y2="104" class="ln"/>
+  <text x="460" y="116" text-anchor="middle" class="lbl-mut">re-read</text>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="670" y1="90" x2="720" y2="90" class="ln"/>
+
+  <text x="460" y="170" text-anchor="middle" class="lbl-mut" style="font-size:8px; letter-spacing:-0.15px">the poll loop checks g_reload each tick (~50ms): re-load config, clear bindings, rebuild,</text>
+  <text x="460" y="186" text-anchor="middle" class="lbl-mut">then re-apply threshold, trigger/gate/debounce, touch, and overlay settings live</text>
+</svg>
+</div>
+
+
+<p><code>SIGHUP</code> sets an atomic <code>g_reload</code> flag; the daemon&rsquo;s poll loop notices it on the next tick and, inside a try/catch (so a malformed save can&rsquo;t crash the engine), re-loads the config and rebuilds everything that can change: the gesture bindings, the match threshold, the trigger/gate buttons and the pen-tip debounce, the touch edge/band and cue, the raw-touch pressure calibration, and the full overlay state (width, effect, fade, ring radius/timing, pressure range, colours). The GUI triggers this with <code>pkill -HUP -x eswl-daemon</code> after writing the file.</p>
+
+<h2 id="6-signals-and-the-singleton-lock">6. Signals and the singleton lock</h2>
+
+<p>The daemon is controlled entirely through Unix signals — there is no control socket — and protected by a single-instance lock.</p>
+
+<table>
+<thead>
+<tr>
+<th> Signal </th>
+<th> Handler </th>
+<th> Effect </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>SIGINT</code> / <code>SIGTERM</code> </td>
+<td> <code>on_signal</code> </td>
+<td> clear the run flag → clean shutdown </td>
+</tr>
+<tr>
+<td> <code>SIGHUP</code> </td>
+<td> <code>on_reload</code> </td>
+<td> set <code>g_reload</code> → live config reload </td>
+</tr>
+<tr>
+<td> <code>SIGUSR1</code> </td>
+<td> <code>on_toggle</code> </td>
+<td> flip <code>g_disabled</code> → pause/resume actions </td>
+</tr>
+<tr>
+<td> <code>SIGCHLD</code> </td>
+<td> <code>SIG_IGN</code> </td>
+<td> auto-reap forked commands (no zombies) </td>
+</tr>
+<tr>
+<td> <code>SIGPIPE</code> </td>
+<td> <code>SIG_IGN</code> </td>
+<td> a dead overlay/tray pipe must never kill the daemon </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The <strong>singleton lock</strong> is a <code>flock(LOCK_EX|LOCK_NB)</code> on <code>$XDG_RUNTIME_DIR/weazystroke.lock</code> (falling back to <code>/tmp</code>), held open for the process lifetime. A second daemon would double every injected action, so if the lock is already held the new instance prints a notice and exits cleanly. The one-shot sub-modes (<code>--record</code>, <code>--capture-trigger</code>) skip the lock since they only monitor and exit. The tray has its own analogous lock (<code>weazystroke-tray.lock</code>).</p>
+
+<h2 id="7-process-supervision">7. Process supervision</h2>
+
+<p>The daemon owns the overlay and tray as child processes, each driven over a pipe to its stdin. Two small supervisors mirror each other:</p>
+
+<table>
+<thead>
+<tr>
+<th> Supervisor </th>
+<th> Child </th>
+<th> Sends </th>
+<th> Notes </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>ProcessOverlay</code> </td>
+<td> <code>eswl-overlay</code> </td>
+<td> the trail line protocol </td>
+<td> self-healing: respawns + replays sticky settings on write failure </td>
+</tr>
+<tr>
+<td> <code>ProcessTray</code> </td>
+<td> <code>eswl-tray</code> </td>
+<td> <code>E</code> / <code>D</code> enabled state </td>
+<td> one-way state push; tray signals back to the parent </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Both fork, wire the pipe&rsquo;s read end onto the child&rsquo;s stdin, and keep a line-buffered <code>FILE*</code> so each command flushes on its newline. On destruction they close the pipe (EOF tells the child to exit) and <code>SIGTERM</code> the child. The overlay supervisor adds the self-healing respawn described in <a href="overlay.gen.html">Stroke-Trail Overlay</a>; the tray supervisor is simpler because losing the tray is not visually disruptive. A third helper, <code>run_command</code>, is the fire-and-forget action launcher (fork + <code>setsid</code> + <code>/bin/sh -c</code>).</p>
+
+<p>The daemon locates these siblings by reading <code>/proc/self/exe</code> and looking next to itself, so it finds <code>eswl-overlay</code> and <code>eswl-tray</code> whether running from the build tree or an install prefix.</p>
+
+<h2 id="8-daemon-command-line">8. Daemon command line</h2>
+
+<p><code>eswl-daemon</code> takes its configuration from the file but exposes flags for overrides and the GUI&rsquo;s helper modes.</p>
+
+<table>
+<thead>
+<tr>
+<th> Flag </th>
+<th> Effect </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>--config PATH</code> </td>
+<td> use a specific config file (default: the XDG path) </td>
+</tr>
+<tr>
+<td> <code>--record NAME</code> </td>
+<td> capture one stroke, save it under <code>NAME</code>, and exit </td>
+</tr>
+<tr>
+<td> <code>--capture-trigger</code> </td>
+<td> print the next pressed button/chord (<code>CAPTURE trigger=N gate=N</code>) and exit </td>
+</tr>
+<tr>
+<td> <code>--button N</code> </td>
+<td> override the trigger button </td>
+</tr>
+<tr>
+<td> <code>--screen WxH</code> </td>
+<td> screen size for pointer tracking (default <code>1920x1080</code>) </td>
+</tr>
+<tr>
+<td> <code>--threshold T</code> </td>
+<td> override the match threshold floor </td>
+</tr>
+<tr>
+<td> <code>--touch-edge E</code> </td>
+<td> override the touch anchor edge </td>
+</tr>
+<tr>
+<td> <code>--overlay</code> </td>
+<td> spawn the live trail renderer </td>
+</tr>
+<tr>
+<td> <code>--tray</code> </td>
+<td> spawn the system-tray icon </td>
+</tr>
+<tr>
+<td> <code>--grab</code> </td>
+<td> grab mice (<code>EVIOCGRAB</code>) to suppress the trigger button </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The two helper modes are how the GUI talks to the engine without a socket: it shells out to <code>eswl-daemon --capture-trigger</code> for trigger learn-mode and reads the result from stdout, and the headless <code>--record</code> mirrors the GUI&rsquo;s in-window recorder. The autostart service runs <code>eswl-daemon --overlay --tray</code> so login brings up the engine, trail, and tray together. See <a href="install.gen.html">Build, Install &amp; Packaging</a> for the service and the device permissions these flags assume.</p>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("pre code").forEach(function (block) {
+    hljs.highlightElement(block);
+  });
+});
+</script>
+</body></html>

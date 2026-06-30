@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke -- Actions & Injection</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  .page-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(36, 40, 59, 0.9);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .page-nav a:hover {
+    background: var(--surface);
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  h4 { color: var(--cyan); font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0.75rem 0 1rem; font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.75rem; text-align: left;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  td { background: var(--bg); }
+  code {
+    background: var(--surface); padding: 0.15rem 0.4rem;
+    border-radius: 3px; font-size: 0.82rem; color: var(--cyan);
+  }
+  pre {
+    background: var(--surface); padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0.75rem 0 1rem;
+    border: 1px solid var(--border);
+  }
+  pre code {
+    display: block; background: transparent; padding: 0;
+    font-size: 0.8rem; color: inherit;
+  }
+  pre code.hljs,
+  code.hljs {
+    background: transparent;
+    padding: 0;
+  }
+  blockquote {
+    background: var(--surface); border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;
+    font-size: 0.82rem;
+  }
+  blockquote strong { color: var(--yellow); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  strong { color: var(--fg); }
+  em { color: var(--muted); font-style: italic; }
+  .diagram-container {
+    display: flex; justify-content: center;
+    margin: 1.25rem auto 1.5rem; padding: 0.75rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    margin: 0 auto;
+    flex: 0 0 auto;
+  }
+  figure.screenshot {
+    margin: 1.25rem auto 1.5rem;
+    padding: 0.6rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.screenshot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.screenshot figcaption {
+    color: var(--muted); font-size: 0.78rem;
+    text-align: center; margin-top: 0.5rem;
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+<div class="page-nav"><a href="index.html">Docs Home</a></div>
+<h1 id="weazystroke--actions--injection">WeazyStroke &ndash; Actions &amp; Injection</h1>
+
+<p>This page documents what happens after a stroke matches: the typed action model, how each type is bound to a callable, and the three ways an action reaches the system — a forked command, the <code>uinput</code> injector, or nothing at all.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#1-the-typed-action-model">The typed action model</a></li>
+<li><a href="#2-binding-a-type-to-a-callable">Binding a type to a callable</a></li>
+<li><a href="#3-the-global-enable-toggle">The global enable toggle</a></li>
+<li><a href="#4-the-uinput-injector">The uinput injector</a></li>
+<li><a href="#5-the-keymap-keys-and-text">The keymap: keys and text</a></li>
+<li><a href="#6-buttons-and-scroll">Buttons and scroll</a></li>
+<li><a href="#7-running-commands">Running commands</a></li>
+</ol>
+
+
+<hr />
+
+<h2 id="1-the-typed-action-model">1. The typed action model</h2>
+
+<p>Each gesture binds exactly one action, modelled on easystroke&rsquo;s typed actions: a <code>type</code> string plus an <code>argument</code> whose meaning depends on the type. The pair lives in <code>GestureEntry</code> and is edited per-row in the GUI&rsquo;s Actions table.</p>
+
+<table>
+<thead>
+<tr>
+<th> <code>type</code> </th>
+<th> <code>argument</code> </th>
+<th> Effect </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>command</code> </td>
+<td> a shell command line </td>
+<td> launch an app or script </td>
+</tr>
+<tr>
+<td> <code>key</code> </td>
+<td> a combo, e.g. <code>ctrl+shift+t</code> </td>
+<td> send a key chord </td>
+</tr>
+<tr>
+<td> <code>text</code> </td>
+<td> literal text </td>
+<td> type the text character by character </td>
+</tr>
+<tr>
+<td> <code>button</code> </td>
+<td> a button number, e.g. <code>2</code> </td>
+<td> click that mouse button </td>
+</tr>
+<tr>
+<td> <code>scroll</code> </td>
+<td> <code>up</code>/<code>down</code>/<code>left</code>/<code>right</code> <code>[count]</code> </td>
+<td> scroll in a direction </td>
+</tr>
+<tr>
+<td> <code>ignore</code> </td>
+<td> — </td>
+<td> recognized, but deliberately does nothing </td>
+</tr>
+<tr>
+<td> <code>misc</code> </td>
+<td> <code>disable</code> </td>
+<td> built-in: toggle WeazyStroke&rsquo;s enabled state </td>
+</tr>
+<tr>
+<td> <code>""</code> </td>
+<td> — </td>
+<td> no action bound yet </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The model is intentionally flat — one type, one string — so it round-trips cleanly through JSON and stays editable by hand. A legacy format with separate <code>key</code>/<code>text</code>/<code>command</code> fields is still read on load and folded into <code>type</code>+<code>argument</code> (priority key > text > command), so older configs keep working. See <a href="configuration.gen.html">Configuration &amp; Process Model</a>.</p>
+
+<h2 id="2-binding-a-type-to-a-callable">2. Binding a type to a callable</h2>
+
+<p>At startup and on every reload, <code>build_bindings</code> (<code>src/main.cc</code>) turns each <code>GestureEntry</code> into a <code>std::function&lt;void()&gt;</code> captured inside its <code>GestureBinding</code>. The recognizer never re-parses types at match time; it just calls the stored callable.</p>
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 960 300" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg   { fill: #1a1b26; }
+    .box  { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .boxh { fill: #2a2438; stroke: #e0af68; stroke-width: 1.5; }
+    .sys  { fill: #1f2535; stroke: #565f89; stroke-width: 1; }
+    .lbls { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut  { fill: #a9b1d6; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .ttl  { fill: #7aa2f7; font-size: 13px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ln   { stroke: #7dcfff; stroke-width: 1.4; fill: none; }
+  </style>
+  <rect x="0" y="0" width="960" height="300" class="bg" rx="6"/>
+  <text x="480" y="24" text-anchor="middle" class="ttl">action dispatch and its three exits</text>
+
+  <rect x="30" y="50" width="170" height="80" class="boxh" rx="6"/>
+  <text x="115" y="84" text-anchor="middle" class="lbls">matched binding</text>
+  <text x="115" y="102" text-anchor="middle" class="lbl-mut">stored callable</text>
+  <text x="115" y="116" text-anchor="middle" class="lbl-mut">(built once)</text>
+
+  <rect x="280" y="44" width="200" height="40" class="box" rx="6"/>
+  <text x="380" y="68" text-anchor="middle" class="lbls">command</text>
+  <rect x="280" y="92" width="200" height="40" class="box" rx="6"/>
+  <text x="380" y="116" text-anchor="middle" class="lbls">key / text</text>
+  <rect x="280" y="140" width="200" height="40" class="box" rx="6"/>
+  <text x="380" y="164" text-anchor="middle" class="lbls">button / scroll</text>
+  <rect x="280" y="188" width="200" height="40" class="box" rx="6"/>
+  <text x="380" y="212" text-anchor="middle" class="lbls">ignore / misc</text>
+
+  <rect x="600" y="44" width="330" height="40" class="sys" rx="6"/>
+  <text x="765" y="68" text-anchor="middle" class="lbl-mut">run_command: fork + setsid + /bin/sh -c</text>
+  <rect x="600" y="100" width="330" height="72" class="sys" rx="6"/>
+  <text x="765" y="124" text-anchor="middle" class="lbl-mut">UinputInjector -> /dev/uinput</text>
+  <text x="765" y="140" text-anchor="middle" class="lbl-mut">keymap resolves keys/text to keycodes;</text>
+  <text x="765" y="156" text-anchor="middle" class="lbl-mut">buttons/scroll emit EV_KEY / EV_REL</text>
+  <rect x="600" y="188" width="330" height="40" class="sys" rx="6"/>
+  <text x="765" y="212" text-anchor="middle" class="lbl-mut">no-op, or flip the enabled flag</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="200" y1="84" x2="280" y2="64" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="200" y1="96" x2="280" y2="112" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="200" y1="104" x2="280" y2="160" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="200" y1="116" x2="280" y2="208" class="ln"/>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="480" y1="64" x2="600" y2="64" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="480" y1="112" x2="600" y2="130" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="480" y1="160" x2="600" y2="140" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="480" y1="208" x2="600" y2="208" class="ln"/>
+
+  <text x="480" y="268" text-anchor="middle" class="lbl-mut">key/text need an XKB keymap; button/scroll/command need the injector — if a</text>
+  <text x="480" y="284" text-anchor="middle" class="lbl-mut">dependency is missing the binding logs a warning and becomes a harmless no-op</text>
+</svg>
+</div>
+
+
+<p>The build is defensive: each type is bound only if its dependencies exist. A <code>key</code> binding needs both the injector and a compiled keymap that can resolve the combo; a <code>text</code> binding needs the injector and a working keymap; <code>button</code>/<code>scroll</code> need the injector. If any prerequisite is missing, <code>build_bindings</code> prints a warning and the gesture falls back to a no-op that prints a notice — recognition still reports the match, it just has nothing to do.</p>
+
+<table>
+<thead>
+<tr>
+<th> Type </th>
+<th> Bound to </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>command</code> </td>
+<td> <code>[cmd]{ run_command(cmd); }</code> </td>
+</tr>
+<tr>
+<td> <code>key</code> </td>
+<td> <code>[inj, ks]{ send_keystroke(*inj, ks); }</code> after <code>keymap.from_combo(arg, ks)</code> </td>
+</tr>
+<tr>
+<td> <code>text</code> </td>
+<td> <code>[inj, &amp;keymap, text]{ type_text(keymap, *inj, text); }</code> </td>
+</tr>
+<tr>
+<td> <code>button</code> </td>
+<td> <code>[inj, b]{ inj-&gt;click(b); }</code> for button number <code>b</code> </td>
+</tr>
+<tr>
+<td> <code>scroll</code> </td>
+<td> <code>[inj, dx, dy]{ inj-&gt;scroll(dx, dy); inj-&gt;flush(); }</code> after speed/invert scaling </td>
+</tr>
+<tr>
+<td> <code>ignore</code> </td>
+<td> <code>[]{}</code> </td>
+</tr>
+<tr>
+<td> <code>misc</code> <code>disable</code> </td>
+<td> <code>[]{ g_disabled = !g_disabled; }</code> </td>
+</tr>
+</tbody>
+</table>
+
+
+<h2 id="3-the-global-enable-toggle">3. The global enable toggle</h2>
+
+<p>WeazyStroke can be paused without quitting. A single atomic flag, <code>g_disabled</code>, gates every action. When set, recognized gestures still match and report — but their actions are suppressed. The one exception is the <code>misc disable</code> toggle itself, so you can always gesture your way back to enabled.</p>
+
+<p>This is enforced structurally: <code>build_bindings</code> wraps every <em>non-misc</em> action in <code>[a]{ if (!g_disabled) a(); }</code>. The flag is flipped from three places, all converging on the same atomic:</p>
+
+<ul>
+<li>a <code>misc disable</code> gesture (handled in-band),</li>
+<li><code>SIGUSR1</code>, raised by the GUI&rsquo;s Pause/Resume button (<code>pkill -USR1 -x eswl-daemon</code>) and by the tray&rsquo;s &ldquo;Enabled&rdquo; toggle (<code>kill(getppid(), SIGUSR1)</code>),</li>
+<li>mirrored down to the tray whenever it changes, so the tray checkmark and tooltip stay in sync.</li>
+</ul>
+
+
+<h2 id="4-the-uinput-injector">4. The uinput injector</h2>
+
+<p><code>UinputInjector</code> (<code>src/uinput_injector.cc</code>) is the only <code>InputInjector</code> implementation — the Wayland replacement for X11&rsquo;s <code>XTest</code>. On construction it opens <code>/dev/uinput</code> and creates one virtual device:</p>
+
+<ul>
+<li>event types <code>EV_KEY</code>, <code>EV_REL</code>, <code>EV_SYN</code>;</li>
+<li>relative axes <code>REL_X</code>, <code>REL_Y</code>, <code>REL_WHEEL</code>, <code>REL_HWHEEL</code>;</li>
+<li>the entire key/button code range (<code>1 .. KEY_MAX</code>), which covers <code>BTN_*</code> pointer buttons as well as keyboard keys;</li>
+<li>bus <code>BUS_VIRTUAL</code>, and a fixed device name, <code>kDeviceName</code>.</li>
+</ul>
+
+
+<p>The fixed name matters: the grab-mode <code>EvdevSource</code> checks it so it never grabs WeazyStroke&rsquo;s own output device and feed itself a loop. The primitives are deliberately small — <code>move_relative</code>, <code>button</code>, <code>scroll</code>, <code>key</code>, <code>flush</code> — with <code>click</code> and <code>tap</code> as convenience helpers built on top. Every emit writes a raw <code>input_event</code> and the kernel timestamps it on receipt.</p>
+
+<table>
+<thead>
+<tr>
+<th> Primitive </th>
+<th> Emits </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>move_relative(dx, dy)</code> </td>
+<td> <code>REL_X</code>/<code>REL_Y</code> with sub-pixel accumulation (fractional remainder carried) </td>
+</tr>
+<tr>
+<td> <code>button(logical, pressed)</code> </td>
+<td> wheel buttons → a scroll detent; otherwise <code>EV_KEY</code> of the mapped <code>BTN_*</code> </td>
+</tr>
+<tr>
+<td> <code>scroll(dx, dy)</code> </td>
+<td> <code>REL_HWHEEL</code>/<code>REL_WHEEL</code> detents </td>
+</tr>
+<tr>
+<td> <code>key(keycode, pressed)</code> </td>
+<td> <code>EV_KEY</code> of a raw evdev keycode </td>
+</tr>
+<tr>
+<td> <code>flush()</code> </td>
+<td> a bare <code>SYN_REPORT</code> </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>In grab mode the injector does double duty: besides running gesture actions, it forwards the grabbed pointer&rsquo;s own motion, wheel, and non-trigger buttons so the mouse keeps working while devices are grabbed, and replays the trigger as a real click when the gate decides it was not a gesture.</p>
+
+<h2 id="5-the-keymap-keys-and-text">5. The keymap: keys and text</h2>
+
+<p>Key and text actions need to turn human-meaningful symbols into evdev keycodes. <code>Keymap</code> (<code>src/keymap.cc</code>) does that with <code>xkbcommon</code>, compiling the system default XKB layout (honoring the <code>XKB_DEFAULT_*</code> environment) and building a cache from keysym to <code>KeyStroke</code> (an evdev keycode plus the modifier flags needed to reach it).</p>
+
+<p>The cache is built by walking every keycode and level in the layout. For each level it records which modifiers (<code>Shift</code>, <code>AltGr</code>/Level3) reach it, converting X11/XKB keycodes back to evdev by subtracting the well-known offset of <code>8</code>. First insertion wins, so the <em>simplest</em> way to produce a symbol (fewest modifiers, lowest level) is preferred.</p>
+
+<p>Three resolution entry points:</p>
+
+<ul>
+<li><strong><code>from_combo("ctrl+shift+t")</code></strong> — splits on <code>+</code>, recognizes modifier words (<code>ctrl</code>/<code>control</code>, <code>shift</code>, <code>alt</code>, <code>super</code>/<code>meta</code>/<code>win</code>/<code>cmd</code>/<code>logo</code>, <code>altgr</code>/<code>iso_level3_shift</code>), and resolves the last non-modifier token as a key name via <code>xkb_keysym_from_name</code>. Combo semantics use the <em>explicit</em> modifiers only.</li>
+<li><strong><code>from_char(codepoint)</code></strong> — maps a Unicode code point to a keysym (<code>xkb_utf32_to_keysym</code>) and then to a stroke, including whatever modifiers the layout needs (e.g. Shift for an uppercase letter).</li>
+<li><strong><code>from_keysym(keysym)</code></strong> — the cache lookup underneath both.</li>
+</ul>
+
+
+<p><code>send_keystroke</code> presses the low-level modifiers first (Ctrl, Alt, Super, AltGr, Shift), taps the key, then releases the modifiers in reverse order, and flushes. <code>type_text</code> decodes the argument UTF-8 byte stream one code point at a time and sends each as its own keystroke, skipping anything the layout can&rsquo;t produce.</p>
+
+<blockquote><p><strong>Layout caveat.</strong> Injection happens <em>below</em> the compositor, which re-applies its own layout to the injected keycodes. For text to come out right, the daemon&rsquo;s layout should match the compositor&rsquo;s active layout. Syncing to the compositor&rsquo;s live layout is a later refinement; the system default is a sound v0, and if no keymap compiles at all (e.g. <code>xkeyboard-config</code> missing) key/text actions are simply disabled with a warning.</p></blockquote>
+
+<h2 id="6-buttons-and-scroll">6. Buttons and scroll</h2>
+
+<p>A <code>button</code> action clicks a logical button: <code>inj-&gt;click(b)</code> presses and releases it. Wheel &ldquo;buttons&rdquo; (logical 4–7) are special-cased inside the injector — they act on press only and emit a scroll detent rather than a key event, so binding &ldquo;wheel up&rdquo; as a button still scrolls.</p>
+
+<p>A <code>scroll</code> action parses its argument with <code>parse_scroll</code>: a direction word plus an optional count (default <code>3</code>). <code>up</code>/<code>down</code> map to vertical detents, <code>left</code>/<code>right</code> to horizontal, with <code>+y</code> up and <code>+x</code> right. Two settings then scale the result before it is bound: <code>scroll_speed</code> multiplies the detent count and <code>scroll_invert</code> flips the sign. The scaled deltas are baked into the binding&rsquo;s callable, so changing either setting takes effect on the next reload.</p>
+
+<pre><code class="code-block">
+"down"      -&gt; dy = -3
+"up 5"      -&gt; dy = +5
+"right 2"   -&gt; dx = +2     (then * scroll_speed, * (invert ? -1 : 1))
+</code></pre>
+
+
+<h2 id="7-running-commands">7. Running commands</h2>
+
+<p>A <code>command</code> action runs a shell command without blocking the engine. <code>run_command</code> (<code>src/process.cc</code>) forks, calls <code>setsid()</code> in the child to detach it from the daemon&rsquo;s session, and <code>exec</code>s <code>/bin/sh -c &lt;command&gt;</code>. The parent returns immediately. The daemon sets <code>SIGCHLD</code> to <code>SIG_IGN</code>, so finished command processes are auto-reaped and never become zombies.</p>
+
+<p>This is the most open-ended action type — anything you can run in a shell, a gesture can launch. Combined with <code>key</code>/<code>text</code>/<code>button</code>/<code>scroll</code> it covers the full easystroke action surface, and <code>ignore</code> lets a shape be deliberately claimed (recognized but inert) so it does not fall through to a near neighbour. See <a href="recognition.gen.html">Gesture Recognition</a> for how the winning binding is chosen, and the <a href="config-gui.gen.html">Config GUI &amp; Tray</a> for the per-type argument editors that produce these strings.</p>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("pre code").forEach(function (block) {
+    hljs.highlightElement(block);
+  });
+});
+</script>
+</body></html>

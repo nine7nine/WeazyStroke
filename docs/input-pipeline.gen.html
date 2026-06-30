@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke -- Input Capture & Triggers</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  .page-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(36, 40, 59, 0.9);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .page-nav a:hover {
+    background: var(--surface);
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  h4 { color: var(--cyan); font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0.75rem 0 1rem; font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.75rem; text-align: left;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  td { background: var(--bg); }
+  code {
+    background: var(--surface); padding: 0.15rem 0.4rem;
+    border-radius: 3px; font-size: 0.82rem; color: var(--cyan);
+  }
+  pre {
+    background: var(--surface); padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0.75rem 0 1rem;
+    border: 1px solid var(--border);
+  }
+  pre code {
+    display: block; background: transparent; padding: 0;
+    font-size: 0.8rem; color: inherit;
+  }
+  pre code.hljs,
+  code.hljs {
+    background: transparent;
+    padding: 0;
+  }
+  blockquote {
+    background: var(--surface); border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;
+    font-size: 0.82rem;
+  }
+  blockquote strong { color: var(--yellow); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  strong { color: var(--fg); }
+  em { color: var(--muted); font-style: italic; }
+  .diagram-container {
+    display: flex; justify-content: center;
+    margin: 1.25rem auto 1.5rem; padding: 0.75rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    margin: 0 auto;
+    flex: 0 0 auto;
+  }
+  figure.screenshot {
+    margin: 1.25rem auto 1.5rem;
+    padding: 0.6rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.screenshot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.screenshot figcaption {
+    color: var(--muted); font-size: 0.78rem;
+    text-align: center; margin-top: 0.5rem;
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+<div class="page-nav"><a href="index.html">Docs Home</a></div>
+<h1 id="weazystroke--input-capture--triggers">WeazyStroke &ndash; Input Capture &amp; Triggers</h1>
+
+<p>This page covers how raw device input becomes a stroke: the source/sink seam, the three input sources, how every device class is folded onto one logical button scheme, and the two pure-logic gates that decide when a hold is a gesture.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#1-the-sourcesink-seam">The source/sink seam</a></li>
+<li><a href="#2-logical-buttons-and-devices">Logical buttons and devices</a></li>
+<li><a href="#3-libinputsource-the-default-monitor">LibinputSource: the default monitor</a></li>
+<li><a href="#4-evdevsource-grab-and-the-trigger-gate">EvdevSource: grab and the trigger gate</a></li>
+<li><a href="#5-touchevdevsource-contact-size">TouchEvdevSource: contact size</a></li>
+<li><a href="#6-the-touch-gate-two-finger-edge-gestures">The touch gate: two-finger edge gestures</a></li>
+<li><a href="#7-pen-quirks-proximity-chords-chatter">Pen quirks: proximity, chords, chatter</a></li>
+<li><a href="#8-the-poll-loop">The poll loop</a></li>
+</ol>
+
+
+<hr />
+
+<h2 id="1-the-sourcesink-seam">1. The source/sink seam</h2>
+
+<p>The engine is split at one clean interface so gesture logic never knows what kind of device drew the stroke. An <strong><code>InputSource</code></strong> produces normalized events; an <strong><code>InputSink</code></strong> consumes them. The daemon wires concrete sources to one sink — the <code>GestureRecognizer</code>.</p>
+
+<pre><code class="code-block">
+class InputSource {            class InputSink {
+    int  fd() const;               on_button(Button, bool pressed, Sample);
+    void dispatch();               on_motion(Sample, dx, dy);
+};                                 on_scroll(dx, dy, Sample);
+                                   on_touch_down/motion/up(slot, Sample);
+                                   on_modifiers(mask);
+                               };
+</code></pre>
+
+
+<p>Everything crossing that seam is expressed as a <code>Sample</code> — the timestamped pointer triple plus pen pressure:</p>
+
+<pre><code class="code-block">
+struct Sample { double x, y; uint32_t time_ms; double pressure = -1.0; };
+</code></pre>
+
+
+<p><code>pressure</code> is <code>0..1</code> for a stylus and <strong>negative</strong> for mouse and touch, so only real pen strokes drive pressure-sensitive trail width. <code>x</code>/<code>y</code> are in the daemon&rsquo;s screen-pixel space (default <code>1920×1080</code>, set by <code>--screen</code>); a source is responsible for mapping its device coordinates into that space. Because Wayland never tells a client where the cursor is, each source tracks the pointer position itself.</p>
+
+<p>This seam is also why the recognizer is testable: a unit test plays <code>on_button</code>/<code>on_motion</code> calls directly, no hardware required.</p>
+
+<h2 id="2-logical-buttons-and-devices">2. Logical buttons and devices</h2>
+
+<p>Mouse buttons, wheel directions, and pen tools are all collapsed onto one logical numbering — kept identical to easystroke&rsquo;s X11 convention so the recognition logic and config stay compatible. The mapping lives in <code>src/button_map.cc</code>.</p>
+
+<table>
+<thead>
+<tr>
+<th> Logical </th>
+<th> Source </th>
+<th> evdev code </th>
+<th> Notes </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>1</code> / <code>2</code> / <code>3</code> </td>
+<td> mouse </td>
+<td> <code>BTN_LEFT</code> / <code>BTN_MIDDLE</code> / <code>BTN_RIGHT</code> </td>
+<td> primary buttons </td>
+</tr>
+<tr>
+<td> <code>4</code> / <code>5</code> / <code>6</code> / <code>7</code> </td>
+<td> wheel </td>
+<td> — </td>
+<td> wheel up / down / left / right (not physical keys) </td>
+</tr>
+<tr>
+<td> <code>8</code> / <code>9</code> </td>
+<td> mouse </td>
+<td> <code>BTN_SIDE</code>/<code>BTN_BACK</code> / <code>BTN_EXTRA</code>/<code>BTN_FORWARD</code> </td>
+<td> back / forward thumb buttons </td>
+</tr>
+<tr>
+<td> <code>10</code> (<code>kPenTip</code>) </td>
+<td> pen </td>
+<td> <code>BTN_TOUCH</code> </td>
+<td> tip in contact with the surface </td>
+</tr>
+<tr>
+<td> <code>11</code> (<code>kPenButton</code>) </td>
+<td> pen </td>
+<td> <code>BTN_STYLUS</code> </td>
+<td> primary barrel/side button </td>
+</tr>
+<tr>
+<td> <code>12</code> (<code>kPenButton2</code>) </td>
+<td> pen </td>
+<td> <code>BTN_STYLUS2</code> </td>
+<td> secondary barrel button </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Pen tools sit <em>above</em> the 1–9 mouse range so a stylus event drives the same trigger machinery as a mouse button without ever colliding with one. Wheel &ldquo;buttons&rdquo; 4–7 are special: as triggers they are ignored, and as <em>injected</em> actions they become scroll events rather than key presses (see <a href="actions.gen.html">Actions &amp; Injection</a>). <code>evdev_to_logical</code> and <code>logical_to_evdev</code> translate both directions; <code>is_wheel_button</code> flags the 4–7 range.</p>
+
+<h2 id="3-libinputsource-the-default-monitor">3. LibinputSource: the default monitor</h2>
+
+<p><code>LibinputSource</code> (<code>src/libinput_source.cc</code>) is the default and the only source used unless <code>--grab</code> is passed. It opens devices through libinput&rsquo;s udev backend on <code>seat0</code>, in <strong>monitor mode</strong>: it does not grab anything, so the compositor still receives every event. The upshot is that in this mode the trigger button <em>also</em> performs its normal click — capture rides alongside, it does not intercept.</p>
+
+<p>It translates libinput&rsquo;s event stream into the sink&rsquo;s vocabulary:</p>
+
+<table>
+<thead>
+<tr>
+<th> libinput event </th>
+<th> Handling </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>POINTER_MOTION</code> </td>
+<td> integrate relative <code>dx/dy</code> into the tracked position, clamp to screen, emit <code>on_motion</code> </td>
+</tr>
+<tr>
+<td> <code>POINTER_MOTION_ABSOLUTE</code> </td>
+<td> map absolute position to screen, emit <code>on_motion</code> </td>
+</tr>
+<tr>
+<td> <code>POINTER_BUTTON</code> </td>
+<td> map to logical button, emit <code>on_button</code> </td>
+</tr>
+<tr>
+<td> <code>POINTER_SCROLL_WHEEL</code> </td>
+<td> convert v120 deltas to detents, emit <code>on_scroll</code> </td>
+</tr>
+<tr>
+<td> <code>TABLET_TOOL_AXIS</code> </td>
+<td> absolute pen motion (+ pressure) → <code>on_motion</code> </td>
+</tr>
+<tr>
+<td> <code>TABLET_TOOL_TIP</code> / <code>_BUTTON</code> </td>
+<td> pen tip / barrel as logical pen buttons → <code>on_button</code> </td>
+</tr>
+<tr>
+<td> <code>TABLET_TOOL_PROXIMITY</code> </td>
+<td> on proximity-out, synthesize releases for any held pen buttons </td>
+</tr>
+<tr>
+<td> <code>TOUCH_DOWN</code> / <code>_MOTION</code> / <code>_UP</code> </td>
+<td> per-slot touch events → <code>on_touch_*</code> (unless <code>skip_touch_</code>) </td>
+</tr>
+<tr>
+<td> <code>KEYBOARD_KEY</code> </td>
+<td> observe modifier keys only; update the modifier mask </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>A tablet tool is an absolute device, so each event carries the pen&rsquo;s mapped position; the source only overwrites an axis that actually changed, so a button-only event keeps the last known position. Keyboard keys are <em>observed, never consumed</em> — the source tracks Ctrl/Alt/Shift/Super state and forwards it via <code>on_modifiers</code> so the recognizer can gate the trigger on a modifier (mouse mode, e.g. Super+click), while the keys themselves pass straight through to the compositor.</p>
+
+<h2 id="4-evdevsource-grab-and-the-trigger-gate">4. EvdevSource: grab and the trigger gate</h2>
+
+<p>The default monitor mode cannot <em>suppress</em> the trigger — a right-drag gesture also fires a right-click. <code>EvdevSource</code> (<code>src/evdev_source.cc</code>), enabled with <code>--grab</code>, is the answer, and the Wayland equivalent of X11&rsquo;s passive button grab. It requires the injector, because suppression only works if a real click can be replayed.</p>
+
+<p>It scans <code>/dev/input</code>, and for every device that looks like a mouse — a relative pointer with buttons that carries the trigger code, and is not WeazyStroke&rsquo;s own injected device — it takes an exclusive <code>EVIOCGRAB</code> and adds its fd to an epoll set. Only mice are grabbed; the keyboard stays free, so <code>Ctrl-C</code> always works, and the kernel drops every grab when the process exits. Non-trigger buttons and motion are forwarded straight through the injector so the pointer keeps working normally while grabbed.</p>
+
+<p>The decision of whether a held trigger was a gesture or a plain click is made by a tiny pure-logic state machine, <code>TriggerGate</code> (<code>src/trigger_gate.h</code>), kept separate and unit-tested:</p>
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg   { fill: #1a1b26; }
+    .box  { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .boxg { fill: #1a2a1a; stroke: #9ece6a; stroke-width: 1.4; }
+    .boxr { fill: #2a1f24; stroke: #f7768e; stroke-width: 1.4; }
+    .lbls { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut  { fill: #a9b1d6; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .grn  { fill: #9ece6a; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .red  { fill: #f7768e; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .ttl  { fill: #7aa2f7; font-size: 13px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ln   { stroke: #7dcfff; stroke-width: 1.4; fill: none; }
+  </style>
+  <rect x="0" y="0" width="900" height="220" class="bg" rx="6"/>
+  <text x="450" y="24" text-anchor="middle" class="ttl">TriggerGate: suppress vs replay (grab mode)</text>
+
+  <rect x="20"  y="58" width="150" height="64" class="box" rx="6"/>
+  <text x="95"  y="84" text-anchor="middle" class="lbls">idle</text>
+  <text x="95"  y="102" text-anchor="middle" class="lbl-mut">withholding = false</text>
+
+  <rect x="250" y="58" width="180" height="64" class="box" rx="6"/>
+  <text x="340" y="84" text-anchor="middle" class="lbls">withholding</text>
+  <text x="340" y="102" text-anchor="middle" class="lbl-mut">press held; track travel</text>
+
+  <rect x="540" y="24" width="200" height="56" class="boxr" rx="6"/>
+  <text x="640" y="48" text-anchor="middle" class="lbls">ReplayClick</text>
+  <text x="640" y="66" text-anchor="middle" class="red">travel &lt; 16px -> inject click</text>
+
+  <rect x="540" y="104" width="200" height="56" class="boxg" rx="6"/>
+  <text x="640" y="128" text-anchor="middle" class="lbls">Swallow</text>
+  <text x="640" y="146" text-anchor="middle" class="grn">travel &gt;= 16px -> gesture</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="170" y1="90" x2="250" y2="90" class="ln"/>
+  <text x="210" y="82" text-anchor="middle" class="lbl-mut">press</text>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="430" y1="80" x2="540" y2="56" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="430" y1="100" x2="540" y2="126" class="ln"/>
+  <text x="490" y="74" text-anchor="middle" class="lbl-mut">release</text>
+
+  <text x="450" y="196" text-anchor="middle" class="lbl-mut">the trigger press is withheld from the compositor until release; then it is either</text>
+  <text x="450" y="210" text-anchor="middle" class="lbl-mut" style="font-size:8px; letter-spacing:-0.15px">swallowed (a gesture was drawn) or replayed as a real click — decided purely by travel</text>
+</svg>
+</div>
+
+
+<p>On press the gate withholds the click and records the origin; motion updates the maximum travel from origin; on release it returns <code>Swallow</code> if travel reached <code>16px</code> (<code>kGestureMinTravel</code>) or <code>ReplayClick</code> otherwise, in which case <code>EvdevSource</code> injects a real press+release so the application still gets its click. A known v0 limitation: there is no press-and-hold timeout, so holding the trigger to drag does not pass through until release — acceptable for the usual right/extra-button triggers.</p>
+
+<h2 id="5-touchevdevsource-contact-size">5. TouchEvdevSource: contact size</h2>
+
+<p>libinput&rsquo;s touch API hides one signal WeazyStroke wants: the contact area (<code>ABS_MT_TOUCH_MAJOR</code>), which can drive trail thickness the way pen pressure does. So when touch gestures <em>and</em> touch-pressure are enabled, the daemon opens the touchscreen a second time, directly, via <code>TouchEvdevSource</code> (<code>src/touch_evdev_source.cc</code>).</p>
+
+<p>It scans <code>/dev/input</code> for a <em>direct</em> (on-screen) multitouch device — one with <code>INPUT_PROP_DIRECT</code> and absolute MT position + tracking — preferring one that also reports <code>ABS_MT_TOUCH_MAJOR</code>. It then parses the MT slot protocol (type B) itself: per-slot tracking ID, position, and contact major, flushed on each <code>SYN_REPORT</code> into <code>on_touch_down/motion/up</code> calls carrying a pseudo-pressure.</p>
+
+<p>The contact size becomes pressure through a fixed band, not a running maximum, so variation <em>within</em> a stroke shows:</p>
+
+<table>
+<thead>
+<tr>
+<th> Knob (config) </th>
+<th> Role </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>touch_pressure_floor</code> </td>
+<td> <code>TOUCH_MAJOR</code> at/below which the trail is thinnest (default <code>150</code>) </td>
+</tr>
+<tr>
+<td> <code>touch_pressure_ref</code> </td>
+<td> <code>TOUCH_MAJOR</code> mapped to full width (default <code>500</code>; <code>0</code> = device max) </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The narrow real range of contact variation is stretched across the width range, so the thin/thick effect is pronounced; both knobs are device-specific and live-tunable. This source reads <strong>read-only</strong> (the compositor still gets the touches), so it must coexist with libinput. To avoid delivering every touch twice, the daemon calls <code>LibinputSource::set_skip_touch(true)</code> whenever the raw source is active, and falls back to libinput&rsquo;s touch if the raw source can&rsquo;t open. <code>ESWL_DEBUG_TOUCH=1</code> enables verbose per-contact tracing for calibration.</p>
+
+<h2 id="6-the-touch-gate-two-finger-edge-gestures">6. The touch gate: two-finger edge gestures</h2>
+
+<p>Touch gestures use a second pure-logic state machine, <code>TouchGate</code> (<code>src/touch_gate.h</code>), to separate &ldquo;the finger that arms&rdquo; from &ldquo;the finger that draws&rdquo; — so an ordinary one-finger swipe is never mistaken for a gesture.</p>
+
+<p>The interaction: the first finger that lands within <code>touch_band</code> px of the configured screen edge becomes the <strong>anchor</strong> (it is held; its own path is ignored, though it may drag the visual cue). The next finger down is the <strong>draw</strong> finger, whose path is the stroke. A third finger is ignored. Lifting the draw finger finalizes the stroke and leaves the anchor armed for another; lifting the anchor ends the session — cancelling an in-progress stroke if one was being drawn.</p>
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg   { fill: #1a1b26; }
+    .box  { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .boxh { fill: #2a2438; stroke: #e0af68; stroke-width: 1.4; }
+    .lbls { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut  { fill: #a9b1d6; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .ttl  { fill: #7aa2f7; font-size: 13px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ln   { stroke: #7dcfff; stroke-width: 1.4; fill: none; }
+  </style>
+  <rect x="0" y="0" width="900" height="250" class="bg" rx="6"/>
+  <text x="450" y="24" text-anchor="middle" class="ttl">TouchGate state machine</text>
+
+  <rect x="30"  y="60" width="150" height="58" class="box" rx="6"/>
+  <text x="105" y="84" text-anchor="middle" class="lbls">idle</text>
+  <text x="105" y="102" text-anchor="middle" class="lbl-mut">no anchor yet</text>
+
+  <rect x="250" y="60" width="170" height="58" class="boxh" rx="6"/>
+  <text x="335" y="84" text-anchor="middle" class="lbls">armed</text>
+  <text x="335" y="102" text-anchor="middle" class="lbl-mut">anchor held in band</text>
+
+  <rect x="490" y="60" width="170" height="58" class="box" rx="6"/>
+  <text x="575" y="84" text-anchor="middle" class="lbls">drawing</text>
+  <text x="575" y="102" text-anchor="middle" class="lbl-mut">2nd finger path</text>
+
+  <rect x="730" y="60" width="150" height="58" class="box" rx="6"/>
+  <text x="805" y="84" text-anchor="middle" class="lbls">finalize</text>
+  <text x="805" y="102" text-anchor="middle" class="lbl-mut">match stroke</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="180" y1="89" x2="250" y2="89" class="ln"/>
+  <text x="215" y="81" text-anchor="middle" class="lbl-mut">edge down</text>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="420" y1="89" x2="490" y2="89" class="ln"/>
+  <text x="455" y="81" text-anchor="middle" class="lbl-mut">2nd down</text>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="660" y1="89" x2="730" y2="89" class="ln"/>
+  <text x="695" y="81" text-anchor="middle" class="lbl-mut">draw up</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="805" y1="118" x2="805" y2="150" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="805" y1="150" x2="335" y2="150" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="335" y1="150" x2="335" y2="118" class="ln"/>
+  <text x="560" y="144" text-anchor="middle" class="lbl-mut">anchor stays armed -> draw another without re-anchoring</text>
+
+  <text x="450" y="196" text-anchor="middle" class="lbl-mut">anchor up mid-stroke -> Cancel (drop trail)  ·  anchor up while idle -> EndSession</text>
+  <text x="450" y="216" text-anchor="middle" class="lbl-mut">a finger landing away from the edge with no anchor held is ignored and never promoted</text>
+  <text x="450" y="236" text-anchor="middle" class="lbl-mut">default edge is the right edge (left/top/bottom often taken by compositor edge swipes)</text>
+</svg>
+</div>
+
+
+<p><code>TouchGate::on_down</code> returns <code>Anchor</code>, <code>Draw</code>, or <code>Ignore</code>; <code>on_up</code> returns <code>Finalize</code>, <code>Cancel</code>, <code>EndSession</code>, or <code>Ignore</code>. The recognizer uses those return codes to start/append/finalize the stroke and to show or hide the overlay&rsquo;s &ldquo;armed&rdquo; ring cue. The gate is configured with the edge, screen size, and band width, and is exhaustively unit-tested (<code>tests/touch_gate_test.cc</code>) without any hardware.</p>
+
+<h2 id="7-pen-quirks-proximity-chords-chatter">7. Pen quirks: proximity, chords, chatter</h2>
+
+<p>A stylus is not a mouse, and three behaviours in <code>LibinputSource</code> and the recognizer exist specifically to make pen gestures feel right.</p>
+
+<ul>
+<li><strong>Proximity-out releases.</strong> When the pen leaves proximity the hardware stops reporting buttons, so a tip or barrel button still &ldquo;held&rdquo; would leave a gesture open forever. The source tracks which pen buttons are down and, on proximity-out, synthesizes their releases in press order — the common &ldquo;drew the gesture, then lifted the pen away&rdquo; case finalizes cleanly.</li>
+<li><strong>Tip + side-button chord.</strong> A &ldquo;gate button&rdquo; can be required: the trigger only starts a gesture while a second button (e.g. the pen side button) is <em>already held</em>, and releasing the gate ends an in-progress stroke. This frees the side button alone for other uses, like a right-click. The recognizer tracks <code>gate_held_</code> and consults it on every trigger press.</li>
+<li><strong>Tip debounce.</strong> The pen tip (<code>BTN_TOUCH</code>) chatters under light pressure — rapid release/press flicker that would otherwise split one stroke into several. With a debounce window (<code>120ms</code> when the trigger is the tip), a release is deferred; a re-press inside the window resumes the same stroke, and only a release that stays released past the deadline finalizes. The daemon&rsquo;s poll loop calls <code>recognizer.tick()</code> to fire these deferred finalizations.</li>
+</ul>
+
+
+<h2 id="8-the-poll-loop">8. The poll loop</h2>
+
+<p>The daemon drives everything from one <code>poll()</code> loop over each source&rsquo;s fd (<code>run_loop</code> in <code>src/main.cc</code>). Touch contact-size adds a second fd (the raw touchscreen) alongside libinput, so the loop polls every source. A short <code>50ms</code> timeout makes the loop tick even when idle, so the <code>keep_going</code> predicate runs often — that predicate is where the debounced pen finalization, the live config reload (<code>SIGHUP</code>), and tray state mirroring happen between input events.</p>
+
+<p>The same loop is reused, with a different predicate, for the daemon&rsquo;s two one-shot modes: <code>--record NAME</code> captures a single stroke and exits, and <code>--capture-trigger</code> prints the next pressed button or chord (used by the GUI&rsquo;s &ldquo;Set…&rdquo; trigger learn-mode) and exits. Both run monitor-only, with no singleton lock, overlay, or tray. See <a href="configuration.gen.html">Configuration &amp; Process Model</a> for those sub-modes and <a href="actions.gen.html">Actions &amp; Injection</a> for what happens after a stroke matches.</p>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("pre code").forEach(function (block) {
+    hljs.highlightElement(block);
+  });
+});
+</script>
+</body></html>

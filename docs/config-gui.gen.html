@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke -- Config GUI & Tray</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  .page-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(36, 40, 59, 0.9);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .page-nav a:hover {
+    background: var(--surface);
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  h4 { color: var(--cyan); font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0.75rem 0 1rem; font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.75rem; text-align: left;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  td { background: var(--bg); }
+  code {
+    background: var(--surface); padding: 0.15rem 0.4rem;
+    border-radius: 3px; font-size: 0.82rem; color: var(--cyan);
+  }
+  pre {
+    background: var(--surface); padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0.75rem 0 1rem;
+    border: 1px solid var(--border);
+  }
+  pre code {
+    display: block; background: transparent; padding: 0;
+    font-size: 0.8rem; color: inherit;
+  }
+  pre code.hljs,
+  code.hljs {
+    background: transparent;
+    padding: 0;
+  }
+  blockquote {
+    background: var(--surface); border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;
+    font-size: 0.82rem;
+  }
+  blockquote strong { color: var(--yellow); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  strong { color: var(--fg); }
+  em { color: var(--muted); font-style: italic; }
+  .diagram-container {
+    display: flex; justify-content: center;
+    margin: 1.25rem auto 1.5rem; padding: 0.75rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    margin: 0 auto;
+    flex: 0 0 auto;
+  }
+  figure.screenshot {
+    margin: 1.25rem auto 1.5rem;
+    padding: 0.6rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.screenshot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.screenshot figcaption {
+    color: var(--muted); font-size: 0.78rem;
+    text-align: center; margin-top: 0.5rem;
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+<div class="page-nav"><a href="index.html">Docs Home</a></div>
+<h1 id="weazystroke--config-gui--tray">WeazyStroke &ndash; Config GUI &amp; Tray</h1>
+
+<p>This page documents the two user-facing processes: <code>eswl-config</code>, the GTK4 + libadwaita configuration app (Actions table, in-window recorder, paginated Preferences, History), and <code>eswl-tray</code>, the GIO/GDBus system-tray helper. Neither captures input — they edit the config and signal the daemon.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#1-the-config-app-at-a-glance">The config app at a glance</a></li>
+<li><a href="#2-the-actions-table">The Actions table</a></li>
+<li><a href="#3-recording-a-stroke">Recording a stroke</a></li>
+<li><a href="#4-preferences">Preferences</a></li>
+<li><a href="#5-triggers">Triggers</a></li>
+<li><a href="#6-autostart-and-live-apply">Autostart and live apply</a></li>
+<li><a href="#7-history">History</a></li>
+<li><a href="#8-theming-the-glass-look">Theming: the glass look</a></li>
+<li><a href="#9-the-system-tray">The system tray</a></li>
+<li><a href="#10-a-note-on-names">A note on names</a></li>
+</ol>
+
+
+<hr />
+
+<h2 id="1-the-config-app-at-a-glance">1. The config app at a glance</h2>
+
+<p><code>eswl-config</code> (<code>src/eswl_config_main.cc</code>) is an <code>AdwApplication</code> with the ID <code>org.weazystroke.Config</code>. That ID makes it a singleton: a second launch is routed to the running instance, which presents (or, with <code>--toggle</code>, hides) the existing window rather than stacking a new one. The tray&rsquo;s left-click passes <code>--toggle</code>; the <code>--config PATH</code> flag overrides the config path.</p>
+
+<p><figure class="screenshot">
+  <img src="screenshot.png" alt="WeazyStroke config window: the Actions table with stroke thumbnails, name, type, and argument columns">
+  <figcaption>The Actions table &mdash; each row is one gesture: a stroke thumbnail (drag-to-reorder handle, with an &times;N badge for multi-example gestures), a name, a typed action, and a type-specific argument editor. Tabs, Pause, and Save live in the window body; the empty headerbar keeps client-side window controls.</figcaption>
+</figure></p>
+
+<p>The window is <code>920×940</code>, forced to dark (<code>ADW_COLOR_SCHEME_FORCE_DARK</code>) so the glass styling reads correctly, and given an empty opaque region on realize so the compositor composites the window&rsquo;s own translucency/blur. Its structure is deliberately unconventional: the <code>GtkHeaderBar</code> is <strong>empty</strong>, present only to keep client-side decorations (window controls + a draggable titlebar). The real chrome lives in the body:</p>
+
+<table>
+<thead>
+<tr>
+<th> Element </th>
+<th> Role </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>GtkStack</code> + <code>GtkStackSwitcher</code> </td>
+<td> three tabs — <strong>Actions</strong>, <strong>Preferences</strong>, <strong>History</strong> </td>
+</tr>
+<tr>
+<td> Pause / Resume button </td>
+<td> <code>pkill -USR1 -x eswl-daemon</code> — toggle the daemon&rsquo;s enabled state </td>
+</tr>
+<tr>
+<td> Save button (<code>suggested-action</code>) </td>
+<td> write <code>gestures.json</code>, then <code>pkill -HUP -x eswl-daemon</code> to reload </td>
+</tr>
+<tr>
+<td> status label (bottom) </td>
+<td> one-line feedback (&ldquo;Saved — running daemon reloaded.&rdquo;, etc.) </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Gesture data lives in <code>GestureConfig</code>, loaded from <code>gestures.json</code> on startup. Appearance lives separately in a sibling <code>gui.json</code> (window opacity and the glass/accent colours), and the History tab reads a sibling <code>history.jsonl</code>.</p>
+
+<h2 id="2-the-actions-table">2. The Actions table</h2>
+
+<p>The Actions tab is a <code>GtkListBox</code> with one row per gesture, under a fixed column header. The columns are <strong>Stroke</strong> (64 px), <strong>Name</strong> (180 px), <strong>Type</strong> (120 px), and <strong>Argument</strong> (the rest).</p>
+
+<p><strong>Stroke thumbnail.</strong> A 64×40 <code>GtkDrawingArea</code> renders the gesture&rsquo;s first recorded example as a polyline in the same blue→green direction gradient the trail uses (start blue, end green), auto-fitted with padding. When a gesture carries multiple examples, a bold <code>×N</code> count badge is drawn in the corner. The thumbnail doubles as the <strong>drag handle</strong> (cursor &ldquo;grab&rdquo;, tooltip &ldquo;Drag to reorder&rdquo;).</p>
+
+<p><strong>Name / Type / Argument.</strong> The name is a flat entry; the type is a dropdown over <code>(none)</code>, <code>command</code>, <code>key</code>, <code>text</code>, <code>button</code>, <code>scroll</code>, <code>ignore</code>, <code>misc</code>; and the argument cell is rebuilt to match the type (next paragraph). Editing any field updates the in-memory config; nothing is persisted until <strong>Save</strong>.</p>
+
+<p><strong>Type-specific argument editors.</strong> <code>populate_arg_editor</code> swaps in the right widget for the selected type:</p>
+
+<table>
+<thead>
+<tr>
+<th> Type </th>
+<th> Editor </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>command</code> / <code>text</code> / <code>(none)</code> </td>
+<td> a plain entry with a type-specific placeholder </td>
+</tr>
+<tr>
+<td> <code>key</code> </td>
+<td> a <strong>Key grabber</strong> button: click to arm, then the first non-modifier press is captured and formatted as <code>ctrl+shift+t</code> (Esc cancels; modifier-only presses ignored) </td>
+</tr>
+<tr>
+<td> <code>button</code> </td>
+<td> a dropdown of buttons <code>1 — left</code> … <code>9 — forward</code> (stores the number) </td>
+</tr>
+<tr>
+<td> <code>scroll</code> </td>
+<td> a dropdown of <code>up</code> / <code>down</code> / <code>left</code> / <code>right</code> </td>
+</tr>
+<tr>
+<td> <code>misc</code> </td>
+<td> a dropdown: <code>(none)</code> or <code>Disable / Enable WeazyStroke</code> (→ argument <code>disable</code>) </td>
+</tr>
+<tr>
+<td> <code>ignore</code> </td>
+<td> a dim &ldquo;(no argument)&rdquo; label </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Switching type clears the argument and repopulates the editor. Selection is robust by design — a click anywhere on a row (via a single <code>GtkGestureClick</code> on the listbox), focus-in, and the <code>row-selected</code> signal all converge on the same selected index, and the selected row gets an accent tint plus a 3 px accent left-bar from CSS.</p>
+
+<p><strong>Reordering.</strong> The thumbnail is a <code>GDK_ACTION_MOVE</code> drag source; the drag icon is a live snapshot of the whole row. Dropping on another row reorders the underlying gesture list (compensating for the erase-then-insert index shift) and sets the status &ldquo;Reordered — Save to keep.&rdquo; <strong>Add Action</strong>, <strong>Delete Action</strong>, and <strong>Record Stroke</strong> sit in a bar below the list.</p>
+
+<h2 id="3-recording-a-stroke">3. Recording a stroke</h2>
+
+<p>Recording happens <strong>in-window</strong>, not in a separate dialog. <code>on_record</code> builds a sheet inside a <code>GtkOverlay</code> that hosts the main content, so it is anchored and centred to the window:</p>
+
+<ul>
+<li>a dim <code>.sheet-backdrop</code> that fills the window and dismisses the sheet on a click outside;</li>
+<li>a <code>460×380</code> <code>.sheet-card</code> with a header, a drawing area, and three buttons.</li>
+</ul>
+
+
+<p>You press-and-drag in the drawing area; a <code>GtkGestureDrag</code> collects the points and previews them live in the blue→green gradient. Two save buttons distinguish the multi-example workflow:</p>
+
+<table>
+<thead>
+<tr>
+<th> Button </th>
+<th> Effect </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <strong>Replace stroke</strong> (suggested) </td>
+<td> clears existing examples, then stores this one </td>
+</tr>
+<tr>
+<td> <strong>Add example</strong> </td>
+<td> appends this stroke as another template for the same gesture </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Because recognition matches against <em>any</em> recorded example (best score wins), &ldquo;Add example&rdquo; is how you make a gesture sturdier — and the thumbnail&rsquo;s <code>×N</code> badge then reflects the new count. See <a href="recognition.gen.html">Gesture Recognition</a>. (The daemon also has a headless <code>--record NAME</code> mode that appends to an existing name; the GUI sheet is the graphical equivalent.)</p>
+
+<h2 id="4-preferences">4. Preferences</h2>
+
+<p>Preferences is an <code>AdwCarousel</code> of three pages — <strong>Triggers</strong>, <strong>Feedback</strong>, <strong>Appearance</strong> — paginated by clickable <code>●</code> page-dots (mouse-wheel paging is disabled so scrolling a spin button doesn&rsquo;t flip the page). Each page is an <code>AdwClamp</code> (max 560 px) so controls stay centred and readable. Every control writes straight into the in-memory <code>GestureConfig</code> (or, for the GUI-only appearance settings, applies and saves immediately).</p>
+
+<p>These map one-to-one onto the JSON settings the daemon reads (<a href="configuration.gen.html">Configuration &amp; Process Model</a>):</p>
+
+<table>
+<thead>
+<tr>
+<th> Setting (label) </th>
+<th> Range / values </th>
+<th> Config key </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> Match threshold </td>
+<td> <code>0.30 – 0.90</code> </td>
+<td> <code>match_threshold</code> </td>
+</tr>
+<tr>
+<td> Trail width (px) </td>
+<td> <code>1 – 20</code> </td>
+<td> <code>trace_width</code> </td>
+</tr>
+<tr>
+<td> Show matched name (OSD) </td>
+<td> on/off </td>
+<td> <code>show_osd</code> </td>
+</tr>
+<tr>
+<td> Pressure-sensitive trail </td>
+<td> on/off </td>
+<td> <code>pressure</code> </td>
+</tr>
+<tr>
+<td> Pressure width min / max (px) </td>
+<td> <code>1–40</code> / <code>1–60</code> </td>
+<td> <code>pressure_min</code> / <code>pressure_max</code> </td>
+</tr>
+<tr>
+<td> Scroll speed </td>
+<td> <code>0.2 – 10.0</code> </td>
+<td> <code>scroll_speed</code> </td>
+</tr>
+<tr>
+<td> Invert scroll </td>
+<td> on/off </td>
+<td> <code>scroll_invert</code> </td>
+</tr>
+<tr>
+<td> Trail effect </td>
+<td> Plain / Glow / Sparkle </td>
+<td> <code>trail_effect</code> </td>
+</tr>
+<tr>
+<td> End transition (ms) </td>
+<td> <code>0 – 1500</code> </td>
+<td> <code>trail_fade_ms</code> </td>
+</tr>
+<tr>
+<td> Trail colour start / end </td>
+<td> colour pickers </td>
+<td> <code>trail_color_start</code> / <code>trail_color_end</code> </td>
+</tr>
+<tr>
+<td> Anchor edge </td>
+<td> Off / Left / Right / Top / Bottom </td>
+<td> <code>touch_edge</code> </td>
+</tr>
+<tr>
+<td> Edge band (px) </td>
+<td> <code>5 – 200</code> </td>
+<td> <code>touch_band</code> </td>
+</tr>
+<tr>
+<td> Ring size (px) </td>
+<td> <code>20 – 300</code> </td>
+<td> <code>touch_ring</code> </td>
+</tr>
+<tr>
+<td> Grow / fade-out time (ms) </td>
+<td> <code>50 – 2000</code> each </td>
+<td> <code>touch_grow_ms</code> / <code>touch_out_ms</code> </td>
+</tr>
+<tr>
+<td> Show edge-hold ring </td>
+<td> on/off </td>
+<td> <code>touch_cue</code> </td>
+</tr>
+<tr>
+<td> Pressure-sensitive touch </td>
+<td> on/off </td>
+<td> <code>touch_pressure</code> </td>
+</tr>
+<tr>
+<td> Contact size thin / full </td>
+<td> <code>0 – 4000</code> each </td>
+<td> <code>touch_pressure_floor</code> / <code>touch_pressure_ref</code> </td>
+</tr>
+<tr>
+<td> Window opacity </td>
+<td> <code>20 – 100</code> </td>
+<td> <code>gui.json</code> (immediate) </td>
+</tr>
+<tr>
+<td> Glass / accent colour </td>
+<td> colour pickers </td>
+<td> <code>gui.json</code> (immediate) </td>
+</tr>
+<tr>
+<td> Start on login </td>
+<td> on/off </td>
+<td> systemd <code>--user</code> service </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Note the two colour groups behave differently: the <strong>glass and accent</strong> colours are GUI-only chrome and persist immediately to <code>gui.json</code>; the <strong>trail</strong> colours are daemon-side and persist only on <strong>Save</strong>.</p>
+
+<h2 id="5-triggers">5. Triggers</h2>
+
+<p>The Triggers page sets what starts a gesture, device-agnostically. A dropdown offers nine presets — built from <code>{trigger, gate}</code> pairs:</p>
+
+<table>
+<thead>
+<tr>
+<th> Preset </th>
+<th> trigger / gate </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> Pen tip + side button (hold) </td>
+<td> <code>10</code> / <code>11</code> (chord) </td>
+</tr>
+<tr>
+<td> Pen tip · Pen side button · Pen 2nd button </td>
+<td> <code>10</code> · <code>11</code> · <code>12</code> </td>
+</tr>
+<tr>
+<td> Right · Middle · Left button </td>
+<td> <code>3</code> · <code>2</code> · <code>1</code> </td>
+</tr>
+<tr>
+<td> Back · Forward button </td>
+<td> <code>8</code> · <code>9</code> </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>For a chord preset the side button must be held for the tip to start a gesture, keeping the side button free for its own action (<a href="input-pipeline.gen.html">Input Capture &amp; Triggers</a>). Four <strong>Modifier</strong> checkboxes (Ctrl/Alt/Shift/Super) add required modifiers for mouse-button triggers, writing <code>trigger_modifiers</code>.</p>
+
+<p>If your trigger isn&rsquo;t a preset, <strong>&ldquo;Set…&rdquo;</strong> runs a learn-mode: it spawns <code>eswl-daemon --capture-trigger</code>, which prints the next pressed button or chord as <code>CAPTURE trigger=N gate=N</code>; the GUI parses that, sets the trigger/gate, and shows it as a &ldquo;Custom: …&rdquo; entry. Because the daemon reports the exact logical button (including which pen button), any device works. The same page also configures the two-finger touch edge gesture (edge, band, ring, timing, cue, contact-size pressure).</p>
+
+<h2 id="6-autostart-and-live-apply">6. Autostart and live apply</h2>
+
+<p><strong>Start on login</strong> installs a systemd <code>--user</code> service at <code>~/.config/systemd/user/weazystroke.service</code>. The unit&rsquo;s <code>ExecStart</code> is the resolved daemon path with <code>--overlay --tray</code>, so login brings up the engine, the trail, and the tray together:</p>
+
+<pre><code class="language-ini code-block">
+[Unit]
+Description=WeazyStroke gesture daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=&lt;.../eswl-daemon&gt; --overlay --tray
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target
+</code></pre>
+
+
+<p>Toggling the checkbox writes (or removes) this file and runs <code>systemctl --user daemon-reload</code> then <code>enable --now</code> / <code>disable --now</code>.</p>
+
+<p><strong>Live apply.</strong> The GUI never restarts the daemon to apply edits. <strong>Save</strong> writes <code>gestures.json</code> and raises <code>SIGHUP</code> (<code>pkill -HUP -x eswl-daemon</code>); the running daemon reloads and rebuilds its bindings in place. <strong>Pause/Resume</strong> raises <code>SIGUSR1</code> to toggle the enabled state. Both are fire-and-forget signals to whatever daemon is running — there is no socket between the GUI and the engine, only the shared config file and these signals.</p>
+
+<h2 id="7-history">7. History</h2>
+
+<p>The History tab is a live recognition log, fed by the <code>history.jsonl</code> the daemon appends one line per stroke. <code>refresh_history</code> reads the file, keeps the last 80 lines, and renders them newest-first:</p>
+
+<ul>
+<li>matched → <code>12:01:54   ✓  open-terminal   score 0.82</code></li>
+<li>missed → a dim <code>12:02:07   ·  no match   best 0.54</code></li>
+</ul>
+
+
+<p>A 2-second timer polls the file&rsquo;s size and only re-renders when it changed, so an idle History tab is cheap. Seeing the best score on a miss is the practical way to decide whether to lower the threshold or redraw a gesture more carefully.</p>
+
+<h2 id="8-theming-the-glass-look">8. Theming: the glass look</h2>
+
+<p>The app ships a hand-written glass aesthetic in two CSS layers. The base layer (<code>load_css</code>, application priority) makes the window translucent, flattens entries/dropdowns/buttons into &ldquo;cell&rdquo; inputs that only reveal a border on hover/focus, forces popovers opaque so dropdown menus stay readable over the transparent window, and styles the Record sheet, scrollbars, sliders, and carousel dots.</p>
+
+<p>The second layer (<code>apply_appearance</code>, user priority, rebuilt live) is where the user&rsquo;s colours land. Crucially it <strong>redefines the theme&rsquo;s named accent colours</strong> with <code>@define-color accent_bg_color</code> / <code>accent_color</code> / <code>accent_fg_color</code>, so <em>every</em> accent the theme draws — checkboxes, the active tab, focus rings, the threshold slider, text selection, the selected-row bar — follows the chosen accent. It also sets the window background to the glass colour at the chosen opacity. Opacity and the glass/accent colours are stored in <code>gui.json</code> and applied the instant you change them.</p>
+
+<h2 id="9-the-system-tray">9. The system tray</h2>
+
+<p><code>eswl-tray</code> (<code>src/eswl_tray_main.cc</code>) is a standalone <strong>StatusNotifierItem</strong>, implemented over GIO/GDBus with <strong>no GTK</strong> at all, so it stays light and works on KDE Plasma and any SNI host. The daemon spawns it (<code>--tray</code>) as a child over a pipe, exactly like the overlay.</p>
+
+<p>On the session bus it owns a unique name (<code>org.kde.StatusNotifierItem-&lt;pid&gt;-1</code>) and registers two objects:</p>
+
+<table>
+<thead>
+<tr>
+<th> Object path </th>
+<th> Interface </th>
+<th> Role </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>/StatusNotifierItem</code> </td>
+<td> <code>org.kde.StatusNotifierItem</code> </td>
+<td> the icon, status, tooltip, and click actions </td>
+</tr>
+<tr>
+<td> <code>/MenuBar</code> </td>
+<td> <code>com.canonical.dbusmenu</code> </td>
+<td> the right-click menu </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>It registers itself with <code>org.kde.StatusNotifierWatcher</code> and re-registers if the watcher reappears (e.g. after a <code>plasmashell</code> restart). The icon is <code>weazystroke</code>; the tooltip reflects state (&ldquo;Gesture daemon — enabled&rdquo; / &ldquo;— paused&rdquo;). The menu has four items: <strong>Enabled</strong> (a checkmark toggle), a separator, <strong>Preferences…</strong>, and <strong>Quit</strong>.</p>
+
+<p>Control flows by signals to the parent daemon, never by a DBus call back to it:</p>
+
+<table>
+<thead>
+<tr>
+<th> Tray action </th>
+<th> Effect </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> left-click (<code>Activate</code>) </td>
+<td> launch <code>eswl-config --toggle</code> (show/hide the window) </td>
+</tr>
+<tr>
+<td> middle-click (<code>SecondaryActivate</code>) </td>
+<td> <code>kill(getppid(), SIGUSR1)</code> — toggle enable </td>
+</tr>
+<tr>
+<td> menu <strong>Enabled</strong> </td>
+<td> <code>kill(getppid(), SIGUSR1)</code> — toggle enable </td>
+</tr>
+<tr>
+<td> menu <strong>Preferences…</strong> </td>
+<td> launch <code>eswl-config</code> </td>
+</tr>
+<tr>
+<td> menu <strong>Quit</strong> </td>
+<td> <code>kill(getppid(), SIGTERM)</code> then quit </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The reverse direction is the pipe: the daemon writes <code>E</code> / <code>D</code> lines to push its current enabled state down, and the tray updates the checkmark and tooltip — so the tray stays in sync no matter how the state was changed. A <code>flock</code> on <code>weazystroke-tray.lock</code> keeps it a singleton, and <code>prctl(PR_SET_PDEATHSIG, SIGTERM)</code> ensures it dies with the daemon.</p>
+
+<h2 id="10-a-note-on-names">10. A note on names</h2>
+
+<p>Three naming conventions coexist, which is worth knowing when reading paths and logs:</p>
+
+<ul>
+<li>the product / UI name is <strong>WeazyStroke</strong>;</li>
+<li>the binaries and the engine namespace use <strong><code>eswl-</code></strong> / <code>es::</code>;</li>
+<li>the on-disk config directory and the daemon project are still <strong><code>easystroke-wayland</code></strong> (<code>~/.config/easystroke-wayland/gestures.json</code>), reflecting the easystroke lineage;</li>
+<li>DBus and systemd identifiers use <strong><code>weazystroke</code></strong> (<code>org.weazystroke.Config</code>, <code>weazystroke.service</code>, the <code>weazystroke</code> icon).</li>
+</ul>
+
+
+<p>See <a href="configuration.gen.html">Configuration &amp; Process Model</a> for the config file these apps read and write, and the <a href="architecture.gen.html">Architecture Overview</a> for how the GUI and tray relate to the daemon.</p>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("pre code").forEach(function (block) {
+    hljs.highlightElement(block);
+  });
+});
+</script>
+</body></html>

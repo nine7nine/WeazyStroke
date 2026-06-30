@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke Documentation</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  h1 { color: var(--accent); font-size: 1.6rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul { padding-left: 1.5rem; margin-bottom: 0.75rem; list-style: none; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; color: var(--cyan); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  code {
+    background: var(--surface); padding: 0.1rem 0.35rem;
+    border-radius: 3px; font-size: 0.8rem; color: var(--cyan);
+  }
+  .subtitle { color: var(--yellow); font-size: 0.95rem; margin-bottom: 1.5rem; }
+  .lead { color: var(--fg); font-size: 0.86rem; margin: 0.75rem 0 1rem; }
+  .doc-list { margin: 1rem 0; }
+  .doc-list li {
+    padding: 0.6rem 0.8rem; margin-bottom: 0.4rem;
+    background: var(--surface); border-radius: 5px;
+    border-left: 3px solid var(--accent);
+  }
+  .doc-list li:hover { border-left-color: var(--cyan); }
+  .doc-list .desc { color: var(--muted); font-size: 0.8rem; margin-top: 0.2rem; }
+  .badge {
+    display: inline-block; padding: 0.1rem 0.5rem; border-radius: 3px;
+    font-size: 0.7rem; font-weight: 600; margin-left: 0.5rem;
+  }
+  .badge-core { background: var(--purple); color: var(--bg); }
+  .badge-comp { background: var(--cyan); color: var(--bg); }
+  .badge-ops { background: var(--green); color: var(--bg); }
+  .stats { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0 2rem; }
+  .stat-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 0.7rem 1.1rem; min-width: 120px;
+  }
+  .stat-val { color: var(--green); font-size: 1.3rem; font-weight: 700; }
+  .stat-label { color: var(--muted); font-size: 0.72rem; }
+  figure.shot {
+    margin: 1.5rem 0; padding: 0.6rem; background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.shot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.shot figcaption {
+    color: var(--muted); font-size: 0.78rem; text-align: center; margin-top: 0.5rem;
+  }
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+
+<h1>WeazyStroke Documentation</h1>
+<p class="subtitle">Design and technical reference for WeazyStroke &mdash; gesture recognition for Wayland. Last updated 2026-06-30.</p>
+
+<p class="lead">
+  WeazyStroke is four small processes: an input engine (<code>eswl-daemon</code>), a live
+  trail renderer (<code>eswl-overlay</code>), a GTK4 + libadwaita config GUI
+  (<code>eswl-config</code>), and a system-tray helper (<code>eswl-tray</code>). The engine
+  links no GUI toolkit at all &mdash; it captures mouse, pen, stylus, and touch through
+  <code>libinput</code>/<code>libevdev</code>, matches strokes with a recognition core recycled
+  verbatim from the classic <a href="https://github.com/thjaeger/easystroke">easystroke</a>, and
+  injects actions through <code>uinput</code>. The renderer and tray run as supervised child
+  processes behind tiny line protocols; the GUI coordinates through one shared JSON file and a
+  reload signal. These pages document each piece from its real implementation.
+</p>
+
+<div class="stats">
+  <div class="stat-box"><div class="stat-val">4</div><div class="stat-label">processes</div></div>
+  <div class="stat-box"><div class="stat-val">3</div><div class="stat-label">input sources</div></div>
+  <div class="stat-box"><div class="stat-val">7</div><div class="stat-label">action types</div></div>
+  <div class="stat-box"><div class="stat-val">3</div><div class="stat-label">trail effects</div></div>
+  <div class="stat-box"><div class="stat-val">8</div><div class="stat-label">unit tests</div></div>
+  <div class="stat-box"><div class="stat-val">~8k</div><div class="stat-label">lines C / C++</div></div>
+</div>
+
+<figure class="shot">
+  <img src="screenshot.png" alt="WeazyStroke config window: the Actions table with stroke thumbnails">
+  <figcaption>WeazyStroke's Actions table &mdash; per-gesture stroke thumbnails, typed actions, and the glass aesthetic.</figcaption>
+</figure>
+
+<hr>
+
+<h2>Architecture &amp; Design</h2>
+<ul class="doc-list">
+  <li>
+    <a href="architecture.gen.html">Architecture Overview</a>
+    <span class="badge badge-core">CORE</span>
+    <div class="desc">The four processes, the end-to-end gesture pipeline, the permission model, source layout, and the design rules.</div>
+  </li>
+  <li>
+    <a href="recognition.gen.html">Gesture Recognition</a>
+    <span class="badge badge-core">CORE</span>
+    <div class="desc">The recycled <code>stroke.c</code> core: arc-length normalization, the constrained-DP matcher, scoring, and multi-example templates.</div>
+  </li>
+  <li>
+    <a href="input-pipeline.gen.html">Input Capture &amp; Triggers</a>
+    <span class="badge badge-core">CORE</span>
+    <div class="desc">The source/sink seam, the three input sources, logical buttons, and the trigger / touch gate state machines.</div>
+  </li>
+  <li>
+    <a href="actions.gen.html">Actions &amp; Injection</a>
+    <span class="badge badge-core">CORE</span>
+    <div class="desc">The typed action model, the <code>uinput</code> injector, the <code>xkbcommon</code> keymap, and button / scroll handling.</div>
+  </li>
+  <li>
+    <a href="configuration.gen.html">Configuration &amp; Process Model</a>
+    <span class="badge badge-core">CORE</span>
+    <div class="desc">The JSON schema, backward compatibility, live reload, signals and the singleton lock, and subprocess supervision.</div>
+  </li>
+</ul>
+
+<h2>Components</h2>
+<ul class="doc-list">
+  <li>
+    <a href="overlay.gen.html">Stroke-Trail Overlay</a>
+    <span class="badge badge-comp">COMPONENT</span>
+    <div class="desc">The separate layer-shell renderer, its line protocol, self-healing respawn, the Cairo effects, the touch cue, and the OSD.</div>
+  </li>
+  <li>
+    <a href="config-gui.gen.html">Config GUI &amp; Tray</a>
+    <span class="badge badge-comp">COMPONENT</span>
+    <div class="desc">The GTK4 / libadwaita app &mdash; Actions table, in-window recorder, paginated Preferences, History &mdash; and the GIO/GDBus tray.</div>
+  </li>
+</ul>
+
+<h2>Build &amp; Operations</h2>
+<ul class="doc-list">
+  <li>
+    <a href="install.gen.html">Build, Install &amp; Packaging</a>
+    <span class="badge badge-ops">OPS</span>
+    <div class="desc">CMake targets and the build graph, sanitizers, tests, the install footprint, device permissions, the two systemd units, and the Arch package.</div>
+  </li>
+</ul>
+
+<hr>
+<p style="color: var(--muted); font-size: 0.75rem; margin-top: 2rem;">
+  WeazyStroke by Jordan Johnston &mdash; <a href="https://github.com/nine7nine/WeazyStroke">github.com/nine7nine/WeazyStroke</a>
+  <br>Gesture recognition for Wayland | recognition core from easystroke by Thomas Jaeger | 2026-06-30
+</p>
+
+<script>hljs.highlightAll();</script>
+</body></html>

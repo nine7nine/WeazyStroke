@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke -- Build, Install & Packaging</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  .page-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(36, 40, 59, 0.9);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .page-nav a:hover {
+    background: var(--surface);
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  h4 { color: var(--cyan); font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0.75rem 0 1rem; font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.75rem; text-align: left;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  td { background: var(--bg); }
+  code {
+    background: var(--surface); padding: 0.15rem 0.4rem;
+    border-radius: 3px; font-size: 0.82rem; color: var(--cyan);
+  }
+  pre {
+    background: var(--surface); padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0.75rem 0 1rem;
+    border: 1px solid var(--border);
+  }
+  pre code {
+    display: block; background: transparent; padding: 0;
+    font-size: 0.8rem; color: inherit;
+  }
+  pre code.hljs,
+  code.hljs {
+    background: transparent;
+    padding: 0;
+  }
+  blockquote {
+    background: var(--surface); border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;
+    font-size: 0.82rem;
+  }
+  blockquote strong { color: var(--yellow); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  strong { color: var(--fg); }
+  em { color: var(--muted); font-style: italic; }
+  .diagram-container {
+    display: flex; justify-content: center;
+    margin: 1.25rem auto 1.5rem; padding: 0.75rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    margin: 0 auto;
+    flex: 0 0 auto;
+  }
+  figure.screenshot {
+    margin: 1.25rem auto 1.5rem;
+    padding: 0.6rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.screenshot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.screenshot figcaption {
+    color: var(--muted); font-size: 0.78rem;
+    text-align: center; margin-top: 0.5rem;
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+<div class="page-nav"><a href="index.html">Docs Home</a></div>
+<h1 id="weazystroke--build-install--packaging">WeazyStroke &ndash; Build, Install &amp; Packaging</h1>
+
+<p>This page covers building the four binaries, the dependency and sanitizer story, the install footprint, the device permissions the engine needs, the two systemd units, and the Arch package.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#1-dependencies">Dependencies</a></li>
+<li><a href="#2-the-build-graph">The build graph</a></li>
+<li><a href="#3-building">Building</a></li>
+<li><a href="#4-sanitizers">Sanitizers</a></li>
+<li><a href="#5-tests">Tests</a></li>
+<li><a href="#6-install-footprint">Install footprint</a></li>
+<li><a href="#7-device-permissions">Device permissions</a></li>
+<li><a href="#8-systemd-units">systemd units</a></li>
+<li><a href="#9-packaging">Packaging</a></li>
+</ol>
+
+
+<hr />
+
+<h2 id="1-dependencies">1. Dependencies</h2>
+
+<p>The build needs a C11/C++17 toolchain, CMake ≥ 3.18 (Ninja recommended), and these libraries:</p>
+
+<table>
+<thead>
+<tr>
+<th> Dependency </th>
+<th> Used by </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>libinput</code>, <code>libudev</code>, <code>libevdev</code> </td>
+<td> the engine&rsquo;s input sources </td>
+</tr>
+<tr>
+<td> <code>xkbcommon</code> </td>
+<td> the keymap (key/text actions) </td>
+</tr>
+<tr>
+<td> <code>gtk4</code>, <code>gtk4-layer-shell</code> </td>
+<td> the trail overlay </td>
+</tr>
+<tr>
+<td> <code>gtk4</code>, <code>libadwaita</code> </td>
+<td> the config GUI </td>
+</tr>
+<tr>
+<td> <code>gio-2.0</code>, <code>gio-unix-2.0</code> (glib2) </td>
+<td> the system tray </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The dependency split is deliberate and visible in <code>CMakeLists.txt</code>: the engine library links <strong>only</strong> <code>libinput</code>/<code>libudev</code>/<code>libevdev</code> and <code>xkbcommon</code>. GTK, libadwaita, and layer-shell are pulled in by their respective front-end binaries and nothing else. The core never links a GUI toolkit.</p>
+
+<h2 id="2-the-build-graph">2. The build graph</h2>
+
+<p>One static library, <code>eswl_core</code>, holds the recognition core and every engine subsystem; the four executables are thin entrypoints on top of it (or, for the GUI, a deliberate partial reuse).</p>
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 940 320" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg   { fill: #1a1b26; }
+    .lib  { fill: #2a2438; stroke: #e0af68; stroke-width: 1.5; }
+    .bin  { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .dep  { fill: #1f2535; stroke: #565f89; stroke-width: 1; }
+    .lbls { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl  { fill: #c0caf5; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut  { fill: #a9b1d6; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .yel  { fill: #e0af68; font-size: 11px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ttl  { fill: #7aa2f7; font-size: 13px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ln   { stroke: #7dcfff; stroke-width: 1.4; fill: none; }
+  </style>
+  <rect x="0" y="0" width="940" height="320" class="bg" rx="6"/>
+  <text x="470" y="24" text-anchor="middle" class="ttl">build graph: one core, four binaries</text>
+
+  <rect x="370" y="46" width="200" height="74" class="lib" rx="6"/>
+  <text x="470" y="68" text-anchor="middle" class="yel">eswl_core (static)</text>
+  <text x="470" y="86" text-anchor="middle" class="lbl-mut">stroke.c, recognizer, sources,</text>
+  <text x="470" y="100" text-anchor="middle" class="lbl-mut">injector, keymap, config, json</text>
+  <text x="470" y="114" text-anchor="middle" class="lbl-mut">links: libinput, libevdev, xkb</text>
+
+  <rect x="40"  y="170" width="190" height="64" class="bin" rx="6"/>
+  <text x="135" y="194" text-anchor="middle" class="lbls">eswl-daemon</text>
+  <text x="135" y="212" text-anchor="middle" class="lbl-mut">main.cc + eswl_core</text>
+
+  <rect x="260" y="170" width="190" height="64" class="bin" rx="6"/>
+  <text x="355" y="194" text-anchor="middle" class="lbls">eswl-overlay</text>
+  <text x="355" y="212" text-anchor="middle" class="lbl-mut">gtk4 + layer-shell</text>
+
+  <rect x="490" y="170" width="190" height="64" class="bin" rx="6"/>
+  <text x="585" y="194" text-anchor="middle" class="lbls">eswl-config</text>
+  <text x="585" y="212" text-anchor="middle" class="lbl-mut">gtk4 + libadwaita</text>
+
+  <rect x="710" y="170" width="190" height="64" class="bin" rx="6"/>
+  <text x="805" y="194" text-anchor="middle" class="lbls">eswl-tray</text>
+  <text x="805" y="212" text-anchor="middle" class="lbl-mut">gio / gdbus only</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="450" y1="120" x2="135" y2="170" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="585" y1="120" x2="585" y2="170" class="ln"/>
+
+  <rect x="260" y="262" width="420" height="40" class="dep" rx="6"/>
+  <text x="470" y="286" text-anchor="middle" class="lbl-mut">eswl-overlay and eswl-tray are independent of eswl_core (own deps only)</text>
+  <text x="585" y="252" text-anchor="middle" class="lbl-mut">reuses gesture_config.cc + json.cc directly (not the sanitized core)</text>
+</svg>
+</div>
+
+
+<p><code>eswl-config</code> does not link the full <code>eswl_core</code>; it compiles <code>gesture_config.cc</code> and <code>json.cc</code> directly. This is intentional — it avoids a sanitizer mismatch and GTK leak noise while still sharing the exact config/JSON code with the engine, so both read and write identical files. <code>eswl-overlay</code> and <code>eswl-tray</code> share no engine code at all; they only consume the line protocols.</p>
+
+<h2 id="3-building">3. Building</h2>
+
+<p>A release build, then install:</p>
+
+<pre><code class="language-sh code-block">
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DENABLE_ASAN=OFF
+cmake --build build
+sudo cmake --install build
+</code></pre>
+
+
+<p>A development build is just the defaults — <code>Debug</code> with sanitizers on (drop the two flags). The repo also ships <code>reinstall.sh</code>, which builds a separate <code>build-release</code> tree (Release, no ASan — <em>not</em> the dev <code>build/</code>), installs it to <code>/usr</code>, and restarts the user service so the freshly installed daemon and overlay take effect:</p>
+
+<pre><code class="language-sh code-block">
+./reinstall.sh        # build-release -&gt; sudo install -&gt; systemctl --user restart weazystroke.service
+</code></pre>
+
+
+<p>With the self-healing overlay, a later compositor restart no longer needs that restart step — the trail comes back on its own.</p>
+
+<h2 id="4-sanitizers">4. Sanitizers</h2>
+
+<p><code>ENABLE_ASAN</code> is <strong>on by default</strong> so day-to-day dev builds catch memory and undefined-behaviour bugs early; release packaging turns it off (<code>-DENABLE_ASAN=OFF</code>). When on, AddressSanitizer + UndefinedBehaviorSanitizer instrument <strong>everything</strong>, the GUI and overlay included, so a bug surfaces in dev rather than only in an optimized release build. This was added precisely because a release-only out-of-bounds array read had slipped through (now fixed and guarded by a test). Run the GTK apps with <code>ASAN_OPTIONS=detect_leaks=0</code> to silence GTK&rsquo;s benign one-shot allocations.</p>
+
+<p>The warning policy is layered: the project&rsquo;s own C++ sources get <code>-Wall -Wextra -Wpedantic</code>; the GTK/GIO front-ends get <code>-Wall -Wextra</code> (no <code>-Wpedantic</code>, whose macro noise is not worth it); and <code>stroke.c</code>, recycled verbatim, is compiled as C with only <code>-Wall</code> so upstream style does not generate noise.</p>
+
+<h2 id="5-tests">5. Tests</h2>
+
+<p><code>enable_testing()</code> registers a suite that links the same <code>eswl_core</code> the daemon uses, so the engine is exercised exactly as shipped. Run them with:</p>
+
+<pre><code class="language-sh code-block">
+ctest --test-dir build
+</code></pre>
+
+
+<table>
+<thead>
+<tr>
+<th> Test </th>
+<th> Covers </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>recognition</code> </td>
+<td> stroke scoring and orthogonal-shape separation </td>
+</tr>
+<tr>
+<td> <code>multitemplate</code> </td>
+<td> best-of-templates matching </td>
+</tr>
+<tr>
+<td> <code>gate</code> </td>
+<td> the pen &ldquo;tip + side button&rdquo; chord gate </td>
+</tr>
+<tr>
+<td> <code>touch_gate</code> </td>
+<td> the edge-anchor / draw-finger state machine </td>
+</tr>
+<tr>
+<td> <code>trigger_gate</code> </td>
+<td> the suppress-vs-replay decision </td>
+</tr>
+<tr>
+<td> <code>config</code> </td>
+<td> JSON config round-trip, typed actions, legacy formats </td>
+</tr>
+<tr>
+<td> <code>json</code> </td>
+<td> the JSON parser/serializer </td>
+</tr>
+<tr>
+<td> <code>keymap</code> </td>
+<td> keysym / character / combo resolution (skips if no XKB layout) </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The gates and recognition are pure logic, so the suite verifies the trickiest behaviour with no hardware and no display.</p>
+
+<h2 id="6-install-footprint">6. Install footprint</h2>
+
+<p><code>cmake --install</code> lays down four binaries and the desktop integration:</p>
+
+<table>
+<thead>
+<tr>
+<th> Installed </th>
+<th> Path </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>eswl-daemon</code>, <code>eswl-overlay</code>, <code>eswl-config</code>, <code>eswl-tray</code> </td>
+<td> <code>bin/</code> </td>
+</tr>
+<tr>
+<td> <code>weazystroke.svg</code> (app icon) </td>
+<td> <code>share/icons/hicolor/scalable/apps/</code> </td>
+</tr>
+<tr>
+<td> <code>weazystroke.desktop</code> (launcher, <code>Exec=eswl-config</code>) </td>
+<td> <code>share/applications/</code> </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The udev rule is <strong>not</strong> installed by CMake — the Arch package installs it, and a from-source install copies it by hand (below). The autostart systemd <code>--user</code> service is not installed either; the GUI&rsquo;s &ldquo;Start on login&rdquo; toggle writes it on demand.</p>
+
+<h2 id="7-device-permissions">7. Device permissions</h2>
+
+<p>The engine never runs as root, but it needs two non-default kernel interfaces: read access to <code>/dev/input/event*</code> (capture) and read-write <code>/dev/uinput</code> (injection). The shipped udev rule grants both to the <code>input</code> group:</p>
+
+<pre><code class="code-block">
+KERNEL=="event*", SUBSYSTEM=="input", GROUP="input", MODE="0640"
+KERNEL=="uinput", SUBSYSTEM=="misc",  GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
+</code></pre>
+
+
+<p>From a source build, install it and join the group:</p>
+
+<pre><code class="language-sh code-block">
+sudo cp packaging/99-easystroke-wayland.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger
+sudo usermod -aG input "$USER"        # then re-login
+</code></pre>
+
+
+<p>If <code>/dev/uinput</code> is unavailable the daemon still runs — it just warns that injection is off, so <code>command</code> actions work but <code>key</code>/<code>text</code>/<code>button</code>/<code>scroll</code> do not. See <a href="actions.gen.html">Actions &amp; Injection</a> and the <a href="architecture.gen.html#4-permission-model">permission model</a>.</p>
+
+<h2 id="8-systemd-units">8. systemd units</h2>
+
+<p>There are two units, for two different roles — do not confuse them.</p>
+
+<p><strong>The autostart user service</strong> is the one most people use. The GUI&rsquo;s &ldquo;Start on login&rdquo; toggle writes <code>~/.config/systemd/user/weazystroke.service</code>, whose <code>ExecStart</code> is the daemon with <code>--overlay --tray</code>, and enables it with <code>systemctl --user enable --now</code>. It runs in your graphical session, picks up your <code>input</code>-group membership, and brings up the engine, trail, and tray together. See <a href="config-gui.gen.html">Config GUI &amp; Tray</a>.</p>
+
+<p><strong>The system service template</strong> (<code>packaging/easystroke-wayland.service</code>) is a starting point for the future &ldquo;small privileged daemon&rdquo; model, where the engine has device capabilities and the GUI talks to it over IPC. It is hardened — <code>NoNewPrivileges</code>, <code>ProtectSystem=strict</code>, <code>ProtectHome=read-only</code>, <code>PrivateTmp</code>, and scoped <code>DeviceAllow</code> for <code>/dev/uinput</code> and <code>char-input</code> — and is provided as a reference, not wired up by the install.</p>
+
+<h2 id="9-packaging">9. Packaging</h2>
+
+<p>The Arch package (<code>packaging/PKGBUILD</code>, <code>weazystroke-git</code>) builds straight from git:</p>
+
+<pre><code class="language-sh code-block">
+cd packaging &amp;&amp; makepkg -si
+</code></pre>
+
+
+<p>It configures a Release, no-ASan build with <code>-DCMAKE_INSTALL_PREFIX=/usr</code>, runs the CMake install (the four binaries, icon, and launcher), and additionally installs the udev rule to <code>/usr/lib/udev/rules.d/99-easystroke-wayland.rules</code>. Its <code>depends</code> array is the runtime set — <code>libinput</code>, <code>libevdev</code>, <code>libxkbcommon</code>, <code>gtk4</code>, <code>gtk4-layer-shell</code>, <code>libadwaita</code>, <code>glib2</code>, <code>systemd-libs</code> — and <code>pkgver()</code> derives a version from the git revision count and short hash.</p>
+
+<blockquote><p><strong>GNOME note.</strong> On GNOME everything works <em>except</em> the live trail: Mutter does not implement <code>wlr-layer-shell</code>, so the overlay window cannot be a click-through always-on-top surface. The engine, GUI, and actions are unaffected. The overlay already sits behind a swappable process + line-protocol interface, so a GNOME Shell-extension backend over DBus could restore the trail with no engine changes — see <a href="overlay.gen.html">Stroke-Trail Overlay</a>.</p></blockquote>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("pre code").forEach(function (block) {
+    hljs.highlightElement(block);
+  });
+});
+</script>
+</body></html>

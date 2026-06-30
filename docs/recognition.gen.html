@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeazyStroke -- Gesture Recognition</title>
+<style>
+  :root {
+    --bg: #1a1b26; --fg: #c0caf5; --accent: #7aa2f7;
+    --green: #9ece6a; --red: #f7768e; --yellow: #e0af68;
+    --surface: #24283b; --border: #3b4261; --muted: #8c92b3;
+    --purple: #bb9af7; --orange: #ff9e64; --cyan: #7dcfff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+    background: var(--bg); color: var(--fg);
+    max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem;
+    line-height: 1.7;
+  }
+  .page-nav {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.5rem;
+  }
+  .page-nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(36, 40, 59, 0.9);
+    color: var(--accent);
+    font-size: 0.78rem;
+    line-height: 1;
+  }
+  .page-nav a:hover {
+    background: var(--surface);
+    color: var(--cyan);
+    text-decoration: none;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin: 1.5rem 0 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.2rem; margin: 2rem 0 0.75rem;
+       border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1.25rem 0 0.5rem; }
+  h4 { color: var(--cyan); font-size: 0.95rem; margin: 1rem 0 0.4rem; }
+  p, li { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  ul, ol { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 0.75rem 0 1rem; font-size: 0.8rem;
+  }
+  th, td {
+    padding: 0.4rem 0.75rem; text-align: left;
+    border: 1px solid var(--border);
+  }
+  th { background: var(--surface); color: var(--accent); font-weight: 600; }
+  td { background: var(--bg); }
+  code {
+    background: var(--surface); padding: 0.15rem 0.4rem;
+    border-radius: 3px; font-size: 0.82rem; color: var(--cyan);
+  }
+  pre {
+    background: var(--surface); padding: 1rem 1.1rem; border-radius: 8px;
+    overflow-x: auto; margin: 0.75rem 0 1rem;
+    border: 1px solid var(--border);
+  }
+  pre code {
+    display: block; background: transparent; padding: 0;
+    font-size: 0.8rem; color: inherit;
+  }
+  pre code.hljs,
+  code.hljs {
+    background: transparent;
+    padding: 0;
+  }
+  blockquote {
+    background: var(--surface); border-left: 3px solid var(--accent);
+    padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0 4px 4px 0;
+    font-size: 0.82rem;
+  }
+  blockquote strong { color: var(--yellow); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  strong { color: var(--fg); }
+  em { color: var(--muted); font-style: italic; }
+  .diagram-container {
+    display: flex; justify-content: center;
+    margin: 1.25rem auto 1.5rem; padding: 0.75rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+    overflow-x: auto;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    margin: 0 auto;
+    flex: 0 0 auto;
+  }
+  figure.screenshot {
+    margin: 1.25rem auto 1.5rem;
+    padding: 0.6rem;
+    background: rgba(36, 40, 59, 0.55);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  figure.screenshot img {
+    display: block; width: 100%; height: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  figure.screenshot figcaption {
+    color: var(--muted); font-size: 0.78rem;
+    text-align: center; margin-top: 0.5rem;
+  }
+</style>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/tokyo-night-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+</head><body>
+<div class="page-nav"><a href="index.html">Docs Home</a></div>
+<h1 id="weazystroke--gesture-recognition">WeazyStroke &ndash; Gesture Recognition</h1>
+
+<p>This page documents the recognition engine: how a raw path becomes a normalized stroke, how two strokes are compared by the recycled <code>stroke.c</code> core, how the cost becomes a score, and how multi-example templates and the match threshold turn that score into a decision.</p>
+
+<h2 id="table-of-contents">Table of Contents</h2>
+
+<ol>
+<li><a href="#1-what-recognition-operates-on">What recognition operates on</a></li>
+<li><a href="#2-normalization-stroke_finish">Normalization: stroke_finish</a></li>
+<li><a href="#3-comparison-stroke_compare">Comparison: stroke_compare</a></li>
+<li><a href="#4-from-cost-to-score">From cost to score</a></li>
+<li><a href="#5-multi-example-templates">Multi-example templates</a></li>
+<li><a href="#6-the-recognizers-decision">The recognizer&rsquo;s decision</a></li>
+<li><a href="#7-what-is-verified">What is verified</a></li>
+</ol>
+
+
+<hr />
+
+<h2 id="1-what-recognition-operates-on">1. What recognition operates on</h2>
+
+<p>Recognition is shape matching, not pixel matching. The engine never compares where you drew or how big — only the <em>shape</em> of the path. That property comes from the recognition core, <code>src/stroke.c</code>, recycled verbatim from easystroke (X11). It is pure C with no dependencies, wrapped by a thin C++ class, <code>Gesture</code> (<code>src/gesture.{cc,h}</code>), so the rest of the engine never touches the C API directly.</p>
+
+<p>A captured stroke arrives as a <code>std::vector&lt;Point&gt;</code> — the raw <code>(x, y)</code> samples accumulated while the trigger was held. Three things happen to it:</p>
+
+<ol>
+<li><strong>Validity.</strong> Fewer than three points is not a stroke (<code>Gesture::from_points</code> returns an invalid gesture, mirroring easystroke&rsquo;s <code>PreStroke::valid()</code> rule of &ldquo;more than two points&rdquo;).</li>
+<li><strong>Normalization.</strong> The points are loaded into a <code>stroke_t</code> and <code>stroke_finish</code> rewrites them into a scale- and translation-invariant representation (below).</li>
+<li><strong>Comparison.</strong> <code>stroke_compare</code> measures the dissimilarity between the candidate and a stored template, returning a cost.</li>
+</ol>
+
+
+<div class="diagram-container">
+<svg width="100%" viewBox="0 0 980 232" xmlns="http://www.w3.org/2000/svg" class="diagram-svg" preserveAspectRatio="xMidYMid meet">
+  <style>
+    .bg   { fill: #1a1b26; }
+    .box  { fill: #24283b; stroke: #3b4261; stroke-width: 1; }
+    .boxh { fill: #2a2438; stroke: #e0af68; stroke-width: 1.5; }
+    .lbls { fill: #c0caf5; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+    .lbl-mut  { fill: #a9b1d6; font-size: 9px; font-family: 'JetBrains Mono', monospace; }
+    .ttl  { fill: #7aa2f7; font-size: 13px; font-weight: bold; font-family: 'JetBrains Mono', monospace; }
+    .ln   { stroke: #7dcfff; stroke-width: 1.5; fill: none; }
+  </style>
+  <rect x="0" y="0" width="980" height="232" class="bg" rx="6"/>
+  <text x="490" y="24" text-anchor="middle" class="ttl">stroke.c data lifecycle</text>
+
+  <rect x="14"  y="50" width="170" height="86" class="box" rx="6"/>
+  <text x="99"  y="72" text-anchor="middle" class="lbls">raw points</text>
+  <text x="99"  y="90" text-anchor="middle" class="lbl-mut">vector&lt;Point&gt;</text>
+  <text x="99"  y="104" text-anchor="middle" class="lbl-mut">screen pixels</text>
+  <text x="99"  y="122" text-anchor="middle" class="lbl-mut">stroke_add_point</text>
+
+  <rect x="212" y="50" width="190" height="86" class="boxh" rx="6"/>
+  <text x="307" y="72" text-anchor="middle" class="lbls">stroke_finish</text>
+  <text x="307" y="90" text-anchor="middle" class="lbl-mut">arc-length t in [0,1]</text>
+  <text x="307" y="104" text-anchor="middle" class="lbl-mut">center + scale to fit</text>
+  <text x="307" y="122" text-anchor="middle" class="lbl-mut">per-segment angle</text>
+
+  <rect x="430" y="50" width="190" height="86" class="box" rx="6"/>
+  <text x="525" y="72" text-anchor="middle" class="lbls">stroke_compare</text>
+  <text x="525" y="90" text-anchor="middle" class="lbl-mut">constrained DP over</text>
+  <text x="525" y="104" text-anchor="middle" class="lbl-mut">direction difference</text>
+  <text x="525" y="122" text-anchor="middle" class="lbl-mut">-> cost in [0, 0.2]</text>
+
+  <rect x="648" y="50" width="170" height="86" class="box" rx="6"/>
+  <text x="733" y="72" text-anchor="middle" class="lbls">Gesture::compare</text>
+  <text x="733" y="90" text-anchor="middle" class="lbl-mut">score =</text>
+  <text x="733" y="104" text-anchor="middle" class="lbl-mut">max(1 - 2.5c, 0)</text>
+  <text x="733" y="122" text-anchor="middle" class="lbl-mut">in [0, 1]</text>
+
+  <rect x="846" y="50" width="120" height="86" class="box" rx="6"/>
+  <text x="906" y="72" text-anchor="middle" class="lbls">decision</text>
+  <text x="906" y="90" text-anchor="middle" class="lbl-mut">best vs</text>
+  <text x="906" y="104" text-anchor="middle" class="lbl-mut">threshold</text>
+  <text x="906" y="122" text-anchor="middle" class="lbl-mut">match?</text>
+
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="184" y1="93" x2="212" y2="93" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="402" y1="93" x2="430" y2="93" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="620" y1="93" x2="648" y2="93" class="ln"/>
+  <line stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" x1="818" y1="93" x2="846" y2="93" class="ln"/>
+
+  <text x="490" y="172" text-anchor="middle" class="lbl-mut">templates are normalized once at load; the candidate is normalized once per stroke;</text>
+  <text x="490" y="188" text-anchor="middle" class="lbl-mut">comparison runs candidate against every template and keeps the best score</text>
+</svg>
+</div>
+
+
+<h2 id="2-normalization-stroke_finish">2. Normalization: stroke_finish</h2>
+
+<p><code>stroke_finish</code> is the heart of the invariance. It rewrites the point array in place so that two strokes of the same shape — drawn anywhere, at any size — end up nearly identical. It runs in four passes.</p>
+
+<p><strong>Arc-length parameterization.</strong> Each point is assigned a time <code>t</code> equal to the cumulative straight-line distance from the start, then the whole array is divided by the total length. So <code>t</code> runs from 0 at the first point to 1 at the last, spaced by <em>distance travelled</em> rather than by <em>sample index</em>. This is what makes recognition largely independent of drawing speed: a slow stretch and a fast stretch of the same curve land at the same <code>t</code>.</p>
+
+<p><strong>Centering and scaling.</strong> The bounding box of the points is computed, and every point is recentred on the box midpoint and divided by <code>scale = max(width, height)</code>, then offset by <code>0.5</code>. The single shared scale (not separate x and y) preserves aspect ratio, so a tall narrow &ldquo;L&rdquo; never gets squashed into a square. A degenerate stroke (scale <code>&lt; 0.001</code>) falls back to scale <code>1</code> to avoid division blow-up.</p>
+
+<p><strong>Per-segment direction.</strong> For each segment <code>i → i+1</code> the code stores two derived quantities:</p>
+
+<table>
+<thead>
+<tr>
+<th> Field </th>
+<th> Definition </th>
+<th> Meaning </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>dt</code> </td>
+<td> <code>t[i+1] - t[i]</code> </td>
+<td> the fraction of total arc length this segment spans </td>
+</tr>
+<tr>
+<td> <code>alpha</code> </td>
+<td> <code>atan2(dy, dx) / π</code> </td>
+<td> the segment&rsquo;s heading, normalized to <code>(-1, 1]</code> </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>After <code>stroke_finish</code> a stroke is, in effect, a <strong>function from normalized arc length to heading</strong> — a sequence of directions, each tagged with how much of the path it covers. Position and size are gone; only the turning of the curve remains. The helper <code>angle_difference</code> treats this heading as circular (it wraps at <code>±1</code>), so the jump from <code>+0.99</code> to <code>-0.99</code> is correctly read as a small turn, not a near-reversal.</p>
+
+<h2 id="3-comparison-stroke_compare">3. Comparison: stroke_compare</h2>
+
+<p><code>stroke_compare(a, b, …)</code> returns a single non-negative cost: small means similar, and a value at or above <code>stroke_infinity</code> (<code>0.2</code>) means &ldquo;not comparable&rdquo;. Conceptually it minimizes</p>
+
+<blockquote><p>the integral, over the shared arc-length parameter, of the <strong>square of the angle difference</strong> between the two strokes' headings,</p></blockquote>
+
+<p>over all reparametrizations whose local slope stays between <code>1/2</code> and <code>2</code>. That slope constraint is the key idea: it lets the two strokes be matched even if one lingers in a region the other rushes through, but forbids matching wildly different amounts of one curve to the other. The original easystroke comment in the source states this directly.</p>
+
+<p>Mechanically it is a constrained dynamic program over the two index grids:</p>
+
+<ul>
+<li><code>dist[x*N+y]</code> holds the best cost to align prefix <code>a[0..x]</code> with <code>b[0..y]</code>; it starts at <code>stroke_infinity</code> everywhere except <code>dist[0] = 0</code>.</li>
+<li>From each reachable cell, the inner <code>step</code> function considers advancing to a later cell <code>(x2, y2)</code>. It rejects the move if the two arc-length spans <code>dtx</code>, <code>dty</code> are too lopsided (<code>dtx ≥ 2.2·dty</code> or vice-versa) — the discrete form of the &ldquo;slope between ½ and 2&rdquo; rule — or if either span is below <code>EPS</code>.</li>
+<li>For an accepted move, <code>step</code> walks the overlapping segments, accumulating <code>(Δt) · (angle difference)²</code>, and scales by <code>(dtx + dty)</code>. If that yields a cheaper path to <code>(x2, y2)</code>, the cell and its back-pointers are updated.</li>
+<li>The outer loops expand the frontier up to four candidate steps per cell (<code>while (k &lt; 4)</code>), always pushing toward the far corner <code>(m, n)</code>.</li>
+</ul>
+
+
+<p>The cost read out of <code>dist[M*N-1]</code> is the alignment cost of the whole stroke. The <code>path_x</code>/<code>path_y</code> back-pointer arrays exist for drawing the matched correspondence; the engine passes <code>nullptr</code> for both because it only needs the cost. A <code>NaN</code> guard (<code>if (new_dist != new_dist) abort()</code>) catches pathological inputs rather than letting them propagate.</p>
+
+<p>The algorithm is <code>O(M·N)</code> in the two strokes' point counts with a small constant, and allocates three <code>M·N</code> scratch arrays per comparison — cheap, because strokes are short and comparison happens once per template at release time, never in the motion hot path.</p>
+
+<h2 id="4-from-cost-to-score">4. From cost to score</h2>
+
+<p>The raw cost is awkward to threshold directly, so <code>Gesture::compare</code> converts it to a bounded similarity score:</p>
+
+<pre><code class="code-block">
+if (!a || !b)            return 0.0;   // an invalid stroke never matches
+cost = stroke_compare(a, b);
+if (cost &gt;= 0.2)         return 0.0;   // beyond stroke_infinity: no match
+return max(1.0 - 2.5 * cost, 0.0);     // else a similarity in (0, 1]
+</code></pre>
+
+
+<p>So a perfect alignment (<code>cost 0</code>) scores <code>1.0</code>, and the score falls linearly to <code>0</code> at <code>cost = 0.4</code> (clamped, since costs above <code>0.2</code> already short-circuit to <code>0</code>). This mirrors easystroke&rsquo;s own <code>Stroke::compare</code> scoring exactly. The match <strong>threshold</strong> is then a floor on this score, applied by the caller — never inside <code>stroke.c</code>.</p>
+
+<table>
+<thead>
+<tr>
+<th> Score </th>
+<th> Implied cost </th>
+<th> Reading </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>1.0</code> </td>
+<td> <code>0.0</code> </td>
+<td> identical shape </td>
+</tr>
+<tr>
+<td> <code>0.7</code> </td>
+<td> <code>0.12</code> </td>
+<td> close match (default-comfortable) </td>
+</tr>
+<tr>
+<td> <code>0.6</code> </td>
+<td> <code>0.16</code> </td>
+<td> the default threshold floor </td>
+</tr>
+<tr>
+<td> <code>0.0</code> </td>
+<td> <code>≥ 0.4</code> </td>
+<td> unrelated shapes </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>The default threshold is <code>0.6</code> (<code>GestureConfig::match_threshold</code>), tunable from <code>0.30</code> to <code>0.90</code> in the GUI. Lower is more lenient (accepts sloppier strokes, risks false matches); higher is stricter. Because the score is a smooth function of cost, the threshold behaves like a sensitivity dial rather than an on/off switch.</p>
+
+<h2 id="5-multi-example-templates">5. Multi-example templates</h2>
+
+<p>A single recorded example makes a brittle target: your &ldquo;C&rdquo; has to resemble <em>that</em> &ldquo;C&rdquo;. WeazyStroke lets one gesture carry several recorded examples — <em>templates</em> — and treats them as alternatives.</p>
+
+<p>In the data model (<code>GestureEntry</code>) a gesture is a name plus <code>std::vector&lt;std::vector&lt;Point&gt;&gt; strokes</code>: one inner vector per recorded example. At bind time each example is normalized into its own <code>Gesture</code>, and the binding holds the whole set:</p>
+
+<pre><code class="code-block">
+struct GestureBinding {
+    std::string name;
+    std::vector&lt;Gesture&gt; strokes;   // one per recorded example
+    std::function&lt;void()&gt; action;
+};
+</code></pre>
+
+
+<p>Recording the same gesture name again <strong>appends</strong> an example rather than replacing it (the daemon&rsquo;s <code>--record</code> path and the GUI&rsquo;s &ldquo;Add example&rdquo; both do this; &ldquo;Replace stroke&rdquo; clears first). At match time the candidate is compared against every template of every binding and the single best score wins — so a candidate matches if it resembles <em>any</em> example. Recording a gesture two or three times, with the natural variation of a real hand, is the recommended way to make recognition sturdy.</p>
+
+<h2 id="6-the-recognizers-decision">6. The recognizer&rsquo;s decision</h2>
+
+<p><code>GestureRecognizer::recognize</code> ties it together. It is a pure function of the captured <code>Gesture</code> and the current bindings:</p>
+
+<pre><code class="code-block">
+Recognition best;            // {matched, name, score, points}
+best.points = g.size();
+if (!g.valid()) return best; // &lt;3 points -&gt; no match, score 0
+
+for (binding : bindings_)
+    for (template : binding.strokes)
+        score = Gesture::compare(g, template);
+        if (score &gt; best.score) { best.score = score; best.name = binding.name; }
+
+best.matched = best.score &gt;= threshold_;
+if (!best.matched) best.name.clear();
+return best;
+</code></pre>
+
+
+<p>Two guards sit <em>before</em> this, in <code>run_stroke</code>, so trivial input never even reaches the matcher:</p>
+
+<ul>
+<li><strong>Travel floor.</strong> If the stroke&rsquo;s maximum distance from its start is below <code>kGestureMinTravel</code> (<code>16.0</code> px, matching the X11 default), it is treated as a click/tap, not a gesture — no comparison runs.</li>
+<li><strong>Point floor.</strong> Two or fewer samples is likewise rejected.</li>
+</ul>
+
+
+<p>Every non-trivial attempt is reported through the recognizer&rsquo;s reporter callback as a <code>Recognition</code> (matched flag, best name, best score, point count). The daemon uses that to print a line, append a row to <code>history.jsonl</code> for the GUI&rsquo;s History tab, and — on a match with the OSD enabled — flash the gesture name on the overlay. The matched binding&rsquo;s action then runs, unless the global enable toggle is off.</p>
+
+<table>
+<thead>
+<tr>
+<th> <code>Recognition</code> field </th>
+<th> Meaning </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>matched</code> </td>
+<td> did the best score clear the threshold </td>
+</tr>
+<tr>
+<td> <code>name</code> </td>
+<td> best-matching binding (empty when no match) </td>
+</tr>
+<tr>
+<td> <code>score</code> </td>
+<td> best score seen, <strong>even when below threshold</strong> (useful for tuning) </td>
+</tr>
+<tr>
+<td> <code>points</code> </td>
+<td> number of points in the captured stroke </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Reporting the best score even on a miss is deliberate: the History tab shows &ldquo;no match — best 0.54&rdquo;, which tells you whether to lower the threshold or redraw more carefully.</p>
+
+<h2 id="7-what-is-verified">7. What is verified</h2>
+
+<p>The recognition path is unit-tested headlessly, without any live input session, by feeding synthetic strokes:</p>
+
+<table>
+<thead>
+<tr>
+<th> Test </th>
+<th> Asserts </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> <code>tests/recognition_test.cc</code> </td>
+<td> a straight right-line scores high against itself and low against a down-line; orthogonal shapes stay well separated </td>
+</tr>
+<tr>
+<td> <code>tests/multitemplate_test.cc</code> </td>
+<td> a candidate close to <em>any</em> recorded example matches; the same candidate is rejected when the gesture knows only the other example </td>
+</tr>
+<tr>
+<td> <code>tests/config_test.cc</code> </td>
+<td> gestures with multiple examples round-trip through save/load intact </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>These run under <code>ctest</code> and link the same <code>eswl_core</code> the daemon uses, so the recycled C core and its C++ wrapper are exercised exactly as shipped. See <a href="architecture.gen.html">Architecture Overview</a> for where recognition sits in the pipeline, and <a href="input-pipeline.gen.html">Input Capture &amp; Triggers</a> for how the path that feeds it is captured.</p>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll("pre code").forEach(function (block) {
+    hljs.highlightElement(block);
+  });
+});
+</script>
+</body></html>
