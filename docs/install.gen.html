@@ -246,10 +246,10 @@ sudo cmake --install build
 </code></pre>
 
 
-<p>A development build is just the defaults — <code>Debug</code> with sanitizers on (drop the two flags). The repo also ships <code>reinstall.sh</code>, which builds a separate <code>build-release</code> tree (Release, no ASan — <em>not</em> the dev <code>build/</code>), installs it with the default prefix (<code>/usr/local</code>), and restarts the user service so the freshly installed daemon and overlay take effect:</p>
+<p>A development build is just the defaults — <code>Debug</code> with sanitizers on (drop the two flags). The repo also ships <code>reinstall.sh</code>, which builds a separate <code>build-release</code> tree (Release, no ASan — <em>not</em> the dev <code>build/</code>), packages it as an RPM with CPack, installs that with <code>dnf</code> (so there is one <code>/usr</code> copy that <code>dnf</code> can upgrade or remove), and restarts the user service so the freshly installed daemon and overlay take effect. It is for Fedora and other dnf-based systems:</p>
 
 <pre><code class="language-sh code-block">
-./reinstall.sh        # build-release -&gt; sudo install -&gt; systemctl --user restart weazystroke.service
+./reinstall.sh        # build-release -&gt; cpack RPM -&gt; sudo dnf install -&gt; systemctl --user restart weazystroke.service
 </code></pre>
 
 

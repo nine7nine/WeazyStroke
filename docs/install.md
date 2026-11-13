@@ -95,10 +95,10 @@ cmake --build build
 sudo cmake --install build
 ```
 
-A development build is just the defaults — `Debug` with sanitizers on (drop the two flags). The repo also ships `reinstall.sh`, which builds a separate `build-release` tree (Release, no ASan — *not* the dev `build/`), installs it with the default prefix (`/usr/local`), and restarts the user service so the freshly installed daemon and overlay take effect:
+A development build is just the defaults — `Debug` with sanitizers on (drop the two flags). The repo also ships `reinstall.sh`, which builds a separate `build-release` tree (Release, no ASan — *not* the dev `build/`), packages it as an RPM with CPack, installs that with `dnf` (so there is one `/usr` copy that `dnf` can upgrade or remove), and restarts the user service so the freshly installed daemon and overlay take effect. It is for Fedora and other dnf-based systems:
 
 ```sh
-./reinstall.sh        # build-release -> sudo install -> systemctl --user restart weazystroke.service
+./reinstall.sh        # build-release -> cpack RPM -> sudo dnf install -> systemctl --user restart weazystroke.service
 ```
 
 With the self-healing overlay, a later compositor restart no longer needs that restart step — the trail comes back on its own.

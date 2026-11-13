@@ -13,7 +13,7 @@ rm -f ~/.local/share/applications/weazystroke.desktop
 rm -f ~/.local/share/icons/hicolor/scalable/apps/weazystroke.svg
 ```
 
-Remove an earlier `./reinstall.sh` install (it lands in `/usr/local`):
+Remove an install made by an older `./reinstall.sh` (it landed in `/usr/local`; it now installs the RPM):
 
 ```bash
 sudo xargs rm -v < build-release/install_manifest.txt
