@@ -22,6 +22,8 @@ namespace {
 // (input group); the privileged daemon will be able to grab them here too.
 int open_restricted(const char *path, int flags, void * /*user_data*/) {
     int fd = ::open(path, flags);
+    if (fd < 0 && errno == EACCES && (flags & O_ACCMODE) == O_RDWR)
+        fd = ::open(path, (flags & ~O_ACCMODE) | O_RDONLY);
     return fd < 0 ? -errno : fd;
 }
 
